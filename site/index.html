@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SAP FX Control Center V5</title>
+  <meta name="description" content="Control local, multiempresa y auditable de tasas de cambio para SAP Business One Service Layer.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="nav shell">
+    <a class="brand" href="#top"><span class="mark">FX</span><span>SAP FX Control Center</span></a>
+    <div class="navlinks"><a href="#features">Funciones</a><a href="#flow">Flujo</a><a href="#install">Instalación</a><a class="button small" href="https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web">GitHub</a></div>
+  </nav>
+  <main id="top">
+    <section class="hero shell">
+      <div class="hero-copy">
+        <div class="eyebrow">SAP BUSINESS ONE · SERVICE LAYER</div>
+        <h1>Tasas de cambio diarias,<br><span>controladas y auditables.</span></h1>
+        <p>Plataforma local multiempresa para consultar bancos y APIs, validar consenso, comparar SAP, actualizar tasas y conservar trazabilidad completa.</p>
+        <div class="actions"><a class="button" href="https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/actions/workflows/build-installers.yml">Descargar instaladores</a><a class="button ghost" href="https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web#readme">Documentación</a></div>
+        <div class="chips"><span>Windows EXE</span><span>Debian / Ubuntu DEB</span><span>Local-first</span><span>Multiempresa</span></div>
+      </div>
+      <div class="dashboard">
+        <div class="dash-head"><div><small>PRODUCCIÓN</small><b>Control de tasas SAP</b></div><span class="online">● En línea</span></div>
+        <div class="kpis"><article><span>Bases SAP</span><b>3</b><small>2 PROD · 1 TEST</small></article><article><span>Fuentes</span><b>4</b><small>Consenso válido</small></article><article><span>Próxima ejecución</span><b>06:00</b><small>Automática</small></article></div>
+        <div class="process"><div class="process-title"><b>Actualización en ejecución</b><span>65%</span></div><div class="steps"><i class="done">✓<small>Banco</small></i><i class="done">✓<small>Validación</small></i><i class="active">3<small>SAP</small></i><i>4<small>Comparación</small></i><i>5<small>Escritura</small></i><i>6<small>Verificación</small></i></div><div class="bar"><span></span></div><div class="console"><p>10:24:18 <b>✓</b> Fuente oficial respondió correctamente.</p><p>10:24:21 <b>✓</b> Consenso entre 3 fuentes validado.</p><p>10:24:25 <em>●</em> Leyendo tasa actual desde SAP Business One...</p></div></div>
+      </div>
+    </section>
+    <section id="features" class="section shell"><div class="section-head"><span>PLATAFORMA</span><h2>Robusta sin convertirse en otro ERP.</h2><p>Hace una cosa concreta: controlar la tasa diaria de SAP de forma segura, visible y reutilizable.</p></div><div class="grid features"><article><b>Multiempresa</b><p>CompanyDB, HANA/SQL Server, usuarios y Service Layers independientes.</p></article><article><b>Fuentes configurables</b><p>API JSON, HTML/CSS, Regex y presets bancarios con validación previa.</p></article><article><b>Consenso mínimo</b><p>La fuente oficial se compara contra al menos dos fuentes adicionales antes de escribir.</p></article><article><b>Auditoría completa</b><p>Tasa previa, bancaria, aplicada, verificación, hora, base, moneda y errores.</p></article><article><b>Automatización diaria</b><p>Programación por CompanyDB, moneda y horario con controles TEST/PROD.</p></article><article><b>Notificaciones</b><p>SMTP saliente opcional para resultados, errores y alertas operativas.</p></article></div></section>
+    <section id="flow" class="section flow shell"><div class="section-head"><span>FLUJO</span><h2>Un proceso visible de principio a fin.</h2></div><div class="flowline"><div><b>1</b><span>Banco / API</span></div><i>→</i><div><b>2</b><span>Validación</span></div><i>→</i><div><b>3</b><span>SAP</span></div><i>→</i><div><b>4</b><span>Comparación</span></div><i>→</i><div><b>5</b><span>Escritura</span></div><i>→</i><div><b>6</b><span>Verificación</span></div><i>→</i><div><b>7</b><span>Auditoría</span></div></div></section>
+    <section id="install" class="section shell"><div class="section-head"><span>INSTALACIÓN</span><h2>Listo para Windows y Debian/Ubuntu.</h2></div><div class="grid installs"><article><div class="os">⊞</div><h3>Windows</h3><p>El EXE incluye Python embebido y todas las librerías. Instala, crea accesos y abre el asistente web local.</p><a href="https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/actions/workflows/build-installers.yml">Ver artifact EXE →</a></article><article><div class="os">◈</div><h3>Debian / Ubuntu</h3><p>El DEB instala dependencias del sistema, crea servicio systemd, rutas persistentes y el entorno Python.</p><a href="https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/actions/workflows/build-installers.yml">Ver artifact DEB →</a></article></div></section>
+  </main>
+  <footer><div class="shell">SAP FX Control Center V5 · Proyecto comunitario para SAP Business One Service Layer · <a href="https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web">Código fuente</a></div></footer>
+</body>
+</html>
