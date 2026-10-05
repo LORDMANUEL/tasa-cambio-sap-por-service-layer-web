@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Atas
-Comment=Automatización local de tasa de cambio para SAP Business One
-Exec=atas
-Terminal=false
-Categories=Office;Finance;
