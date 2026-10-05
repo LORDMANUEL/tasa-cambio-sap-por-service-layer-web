@@ -30,7 +30,7 @@ jobs:
     env:
       PYTHON_EMBED_VERSION: '3.13.14'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Resolve version
         id: version
         shell: pwsh
@@ -38,7 +38,7 @@ jobs:
           $v = (Get-Content VERSION.txt -Raw).Trim()
           if (-not $v) { throw "VERSION.txt is empty" }
           "version=$v" >> $env:GITHUB_OUTPUT
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
           cache: pip
@@ -212,7 +212,7 @@ jobs:
   debian-deb:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Resolve Debian version
         id: version
         shell: bash
@@ -220,7 +220,7 @@ jobs:
           VERSION="$(tr -d '\r\n ' < VERSION.txt)"
           test -n "$VERSION"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
           cache: pip
@@ -311,7 +311,7 @@ jobs:
       contents: write
       actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Resolve release version
