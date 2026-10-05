@@ -55,15 +55,32 @@ jobs:
         run: |
           $exe = Get-ChildItem dist/installer/*.exe | Select-Object -First 1
           if (-not $exe) { throw "Atas EXE not found" }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
+          $mib = [math]::Round($exe.Length / 1MB, 2)
           Write-Host "ATAS_WINDOWS_EXE=$($exe.Name)"
           Write-Host "ATAS_WINDOWS_EXE_BYTES=$($exe.Length)"
-          Get-FileHash $exe.FullName -Algorithm SHA256
+          Write-Host "ATAS_WINDOWS_EXE_MIB=$mib"
+          Write-Host "ATAS_WINDOWS_EXE_SHA256=$hash"
+          @(
+            "product=Atas"
+            "version=5.0.0"
+            "platform=windows-x64"
+            "file=$($exe.Name)"
+            "bytes=$($exe.Length)"
+            "mib=$mib"
+            "sha256=$hash"
+            "python_embedded=3.13.14"
+            "author=LORDMANUEL"
+            "repository=https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web"
+          ) | Set-Content -Encoding UTF8 dist/installer/BUILD_INFO.txt
           if (-not (Test-Path dist/windows-package/runtime/python/python.exe)) { throw "Embedded Python missing" }
           if (-not (Test-Path dist/windows-package/app/main.py)) { throw "Application payload missing" }
       - uses: actions/upload-artifact@v4
         with:
           name: Atas-Windows-x64
-          path: dist/installer/*.exe
+          path: |
+            dist/installer/*.exe
+            dist/installer/BUILD_INFO.txt
           if-no-files-found: error
 
   debian-deb:
@@ -91,11 +108,28 @@ jobs:
           test -n "$DEB"
           dpkg-deb --info "$DEB"
           dpkg-deb --contents "$DEB" | grep -q '/opt/atas/'
+          BYTES=$(stat -c%s "$DEB")
+          SHA=$(sha256sum "$DEB" | awk '{print $1}')
+          MIB=$(awk "BEGIN {printf \"%.2f\", $BYTES/1048576}")
           echo "ATAS_DEB=$(basename "$DEB")"
-          echo "ATAS_DEB_BYTES=$(stat -c%s "$DEB")"
-          sha256sum "$DEB"
+          echo "ATAS_DEB_BYTES=$BYTES"
+          echo "ATAS_DEB_MIB=$MIB"
+          echo "ATAS_DEB_SHA256=$SHA"
+          {
+            echo "product=Atas"
+            echo "version=5.0.0"
+            echo "platform=debian-amd64"
+            echo "file=$(basename "$DEB")"
+            echo "bytes=$BYTES"
+            echo "mib=$MIB"
+            echo "sha256=$SHA"
+            echo "author=LORDMANUEL"
+            echo "repository=https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web"
+          } > dist/BUILD_INFO_DEBIAN.txt
       - uses: actions/upload-artifact@v4
         with:
           name: Atas-Debian-amd64
-          path: dist/*.deb
+          path: |
+            dist/*.deb
+            dist/BUILD_INFO_DEBIAN.txt
           if-no-files-found: error
