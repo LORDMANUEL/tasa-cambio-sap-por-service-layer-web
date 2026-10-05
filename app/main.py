@@ -180,6 +180,64 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
         if notification_enabled and str(form.get('smtp_password','')): smtp_secret=encrypt_secret(str(form.get('smtp_password')))
         logo_setting=logo_url or ''
         store.set_settings({'organization_name':org,'organization_logo':logo_setting,'service_layer_root':root,'odata_version':odata,'sap_b1_version':sap_ver,'sap_base_url':_endpoint(root,odata),'setup_complete':'false','prod_automation_enabled':'true' if 'enable_prod_writes' in form else 'false','notifications_enabled':'true' if notification_enabled else 'false','smtp_host':str(form.get('smtp_host','')).strip(),'smtp_port':str(form.get('smtp_port','587')).strip(),'smtp_security':str(form.get('smtp_security','STARTTLS')).strip(),'smtp_user':str(form.get('smtp_user','')).strip(),'smtp_from':str(form.get('smtp_from','')).strip(),'smtp_secret':smtp_secret,'notification_recipients':str(form.get('notification_recipients','')).strip()})
+
+        # Validate at least three independent market sources before enabling automation.
+        scodes=form.getlist('source_code'); snames=form.getlist('source_name'); scountries=form.getlist('source_country'); stypes=form.getlist('source_type'); surls=form.getlist('source_url'); sconfigs=form.getlist('source_config'); ssecrets=form.getlist('source_secret_headers')
+        temp_sources=[]; valid_sources=[]; source_errors=[]
+        for i,code in enumerate(scodes):
+            src={'code':str(code).strip().upper(),'name':str(snames[i] if i<len(snames) else code).strip(),'country':str(scountries[i] if i<len(scountries) else '').strip(),'source_type':str(stypes[i] if i<len(stypes) else 'WEB_HTML').strip().upper(),'url':str(surls[i] if i<len(surls) else '').strip(),'config_json':str(sconfigs[i] if i<len(sconfigs) else '{}').strip() or '{}','headers_json':'{}','timeout_seconds':15,'tls_verify':1}
+            secret=str(ssecrets[i] if i<len(ssecrets) else '').strip()
+            if secret:
+                import json as _json; _json.loads(secret); src['secret_headers_blob']=encrypt_secret(secret)
+            if not src['code'] or not src['name']: continue
+            temp_sources.append(src)
+            try:
+                fetch_source(src,settings); valid_sources.append(src['code'])
+            except Exception as exc:
+                source_errors.append(f"{src['code']}: {exc}")
+        if len(valid_sources)<3:
+            raise ValueError('Se requieren al menos 3 fuentes bancarias válidas. '+(' | '.join(source_errors) if source_errors else 'Configure y pruebe tres fuentes.'))
+        for src in temp_sources:
+            sid=store.upsert_bank_source(source_id=None,code=src['code'],name=src['name'],country=src['country'],source_type=src['source_type'],url=src['url'],enabled=True,config_json=src['config_json'],headers_json='{}',timeout_seconds=15,tls_verify=True)
+            if src.get('secret_headers_blob'): store.set_bank_source_secret_headers(sid,src['secret_headers_blob'])
+            store.mark_bank_source_result(sid,src['code'] in valid_sources,'OK' if src['code'] in valid_sources else next((x for x in source_errors if x.startswith(src['code']+':')),'ERROR'))
+
+        names=form.getlist('company_name'); dbs=form.getlist('database_name'); types=form.getlist('db_type'); envs=form.getlist('environment'); roots=form.getlist('company_service_root'); ods=form.getlist('company_odata'); users=form.getlist('sap_user'); passwords=form.getlist('sap_password')
+        if not names: raise ValueError('Agregue al menos una base SAP.')
+        same='same_sap_credentials' in form; shared_user=str(form.get('shared_sap_user','')).strip(); shared_pwd=str(form.get('shared_sap_password',''))
+        sched=str(form.get('schedule_time','06:00')); hh,mm=(int(x) for x in sched.split(':',1)); currencies_csv=str(form.get('currencies_csv','USD,EUR')).upper().replace(' ','')
+        timezone=str(form.get('timezone','America/Tegucigalpa')).strip()
+        ZoneInfo(timezone)
+        _set_env_value('TIMEZONE',timezone); settings.timezone=timezone; store.timezone=timezone
+        store.set_settings({'timezone':timezone})
+        use_usd='USD' in currencies_csv.split(','); use_eur='EUR' in currencies_csv.split(',')
+        primary=str(form.get('primary_bank',valid_sources[0])).strip().upper()
+        if primary not in valid_sources: primary=valid_sources[0]
+        secondary=next((x for x in valid_sources if x!=primary),valid_sources[1])
+        all_sources=','.join(valid_sources)
+        for i,name in enumerate(names):
+            user=shared_user if same else (users[i] if i<len(users) else '')
+            pwd=shared_pwd if same else (passwords[i] if i<len(passwords) else '')
+            if not user or not pwd: raise ValueError(f'Falta usuario/contraseña SAP para {name or dbs[i]}')
+            env=(envs[i] if i<len(envs) else 'TEST').upper()
+            cid=store.upsert_company(company_id=None,company_name=name,database_name=dbs[i],db_type=types[i] if i<len(types) else 'HANA',environment=env,enabled=True,allow_write=env=='TEST',scheduled_write=True,auto_enabled=True,schedule_hour=hh,schedule_minute=mm,use_usd=use_usd,use_eur=use_eur,sap_user=user,primary_bank=primary,secondary_bank=secondary,service_layer_root=roots[i] if i<len(roots) else '',odata_version=ods[i] if i<len(ods) else '',sap_b1_version=sap_ver,bank_source_codes=all_sources,currencies_csv=currencies_csv)
+            store.set_secret_blob(cid,encrypt_secret(pwd))
+        store.set_settings({'setup_complete':'true'})
+        r=RedirectResponse('/?welcome=1',303); r.set_cookie(COOKIE,sign_session(admin_user,settings.web_session_secret),httponly=True,samesite='strict',secure=False,max_age=28800); return r
+    except Exception as exc:
+        log.exception('Initial setup failed')
+        return HTMLResponse(_setup_page(str(exc)),400)
+
+# ---------------------------------------------------------------------------
+# Login/session
+# ---------------------------------------------------------------------------
+@app.get('/login',response_class=HTMLResponse)
+def login_page():
+    if not _setup_complete(): return RedirectResponse('/setup',303)
+    org=_org(); logo=_logo_url(); brand=f"<img class='login-org-logo' src='{esc(logo)}'>" if logo else "<div class='brand-mark xl'>FX</div>"
+    return HTMLResponse(f"""<!doctype html><html lang='es' data-theme='dark'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>SAP FX Control Center · Acceso</title><link rel='stylesheet' href='/static/styles.css'><script src='/static/app.js' defer></script></head><body><div class='login-v5'><section class='login-visual'>{brand}<div><div class='eyebrow'>SAP BUSINESS ONE · DAILY FX</div><h1>Control de tasas simple, visual y trazable.</h1><p>{esc(org)}</p></div><div class='login-flow'><span>Banco</span><i>→</i><span>Validación</span><i>→</i><span>SAP</span><i>→</i><span>Auditoría</span></div></section><section class='login-form-wrap'><form method='post' class='login-card v5'><div class='eyebrow'>ACCESO LOCAL</div><h2>Bienvenido</h2><p class='muted'>Ingresa para administrar tasas y automatizaciones.</p><label>Usuario</label><input name='user' autocomplete='username' required><label>Contraseña</label><input type='password' name='password' autocomplete='current-password' required><button class='btn primary xl'>Ingresar →</button><small>Panel local · secretos cifrados por el sistema operativo</small></form></section></div></body></html>""")
+
+@app.post('/login')
 async def login(req:Request):
     if not _setup_complete(): return RedirectResponse('/setup',303)
     f=await req.form(); user=str(f.get('user','')); pwd=str(f.get('password',''))
