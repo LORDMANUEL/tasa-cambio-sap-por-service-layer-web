@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+logs/*.log
+logs/*.jsonl
+data/*.db
+data/*.json
+*.pyc
+
+# Build and installer outputs
+build/
+dist/
+*.exe
+*.deb
+runtime/
+vendor/wheels/
+.prepared_v5
+app/static/uploads/*
+!app/static/uploads/.gitkeep
