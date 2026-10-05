@@ -326,6 +326,8 @@ jobs:
             find dist/release -type f -maxdepth 4 -print
             exit 1
           fi
+          NOTES="docs/RELEASE_NOTES_V${VERSION}.md"
+          if [ ! -f "$NOTES" ]; then NOTES="docs/RELEASE_NOTES_V5.0.0.md"; fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             git fetch --tags --force
             TAG_SHA="$(git rev-list -n 1 "$TAG" 2>/dev/null || true)"
@@ -334,8 +336,8 @@ jobs:
               exit 0
             fi
             gh release upload "$TAG" "${FILES[@]}" --clobber
-            gh release edit "$TAG" --title "Atas V$VERSION" --notes-file "docs/RELEASE_NOTES_V5.0.0.md" --latest
+            gh release edit "$TAG" --title "Atas V$VERSION" --notes-file "$NOTES" --latest
           else
-            gh release create "$TAG" "${FILES[@]}" --target "$GITHUB_SHA" --title "Atas V$VERSION" --notes-file "docs/RELEASE_NOTES_V5.0.0.md" --latest
+            gh release create "$TAG" "${FILES[@]}" --target "$GITHUB_SHA" --title "Atas V$VERSION" --notes-file "$NOTES" --latest
           fi
           echo "ATAS_RELEASE=https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
