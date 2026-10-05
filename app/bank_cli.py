@@ -5,7 +5,7 @@ from app.market_sources import fetch_source
 
 def main() -> int:
     settings=get_settings(); store=Store(settings.db_path,settings.timezone); sources=store.list_bank_sources(enabled_only=True)
-    print('='*72); print(' PRUEBA DE FUENTES DE CAMBIO - SAP FX CONTROL CENTER V5'); print('='*72)
+    print('='*72); print(' PRUEBA DE FUENTES DE CAMBIO - ATAS V5'); print('='*72)
     if not sources: print(' No hay fuentes configuradas. Abra el panel web -> Bancos.'); return 1
     failures=0
     for src in sources:
