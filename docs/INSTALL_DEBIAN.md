@@ -6,7 +6,7 @@ Instale el paquete generado por GitHub Actions:
 sudo apt install ./sap-fx-control-center_5.0.0_amd64.deb
 ```
 
-APT instala automáticamente Python 3, `python3-venv`, `python3-pip`, certificados y `xdg-utils` si faltan. Durante `postinst` se crea un entorno virtual y se instalan las dependencias Python declaradas por la aplicación.
+APT instala automáticamente Python 3, `python3-venv`, `python3-pip`, certificados y `xdg-utils` si faltan. Durante `postinst` se crea un entorno virtual y se instalan las dependencias Python declaradas por la aplicación. Esta fase requiere acceso a Internet para obtener los paquetes Python desde PyPI.
 
 ## Rutas
 
