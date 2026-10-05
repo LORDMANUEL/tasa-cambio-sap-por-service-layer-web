@@ -4,9 +4,17 @@ Validación ejecutada sobre el paquete final.
 
 ## Suite automática
 
-- `pytest`: **19 passed**
+- `pytest`: **22 passed**
 - `compileall app`: OK
 - `node --check app/static/app.js`: OK
+
+## Validación de distribución
+
+- Windows EXE: compilación Inno Setup + instalación silenciosa + arranque + `/health`.
+- Windows Portable ZIP: descompresión limpia + arranque con Python embebido + `/health`.
+- Debian/Ubuntu DEB: instalación APT + venv + servicio/aplicación + `/health`.
+- GitHub Pages: publicación a `gh-pages` + verificación HTTP pública.
+- Higiene de release: bloqueo de endpoints/CompanyDB específicos de clientes.
 
 ## Casos cubiertos
 

@@ -83,6 +83,8 @@ No requiere Python previamente instalado.
 
 [Guía de instalación Windows](docs/INSTALL_WINDOWS.md)
 
+También existe una edición **Portable x64**: se descomprime y ejecuta con el Python 3.13 incluido; CI valida el ZIP ya descomprimido contra `/health`.
+
 ### Debian / Ubuntu amd64
 
 El `.deb`:
@@ -102,7 +104,16 @@ Los binarios se publican como **Artifacts** del workflow:
 Artifacts esperados:
 
 - `Atas-Windows-x64` → `Atas-V5-Setup-x64.exe` + `BUILD_INFO.txt`.
+- `Atas-Windows-Portable-x64` → `Atas-V5-Portable-x64.zip` + `BUILD_INFO_PORTABLE.txt`.
 - `Atas-Debian-amd64` → `atas_5.0.0_amd64.deb` + `BUILD_INFO_DEBIAN.txt`.
+
+## Release estable
+
+La versión publicada se encuentra en:
+
+**https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/releases/latest**
+
+La Release adjunta los binarios de Windows y Debian junto con sus archivos de tamaño/SHA-256.
 
 ## Ejecución desde código fuente
 

@@ -20,3 +20,29 @@ No requiere una instalación previa de Python.
 4. El servicio web escucha únicamente en `127.0.0.1`.
 
 Los datos quedan dentro del perfil local donde se instala.
+
+
+## Edición Portable
+
+GitHub Actions también genera:
+
+```text
+Atas-V5-Portable-x64.zip
+```
+
+No instala Python. El ZIP ya contiene:
+
+```text
+runtime/python/python.exe
+runtime/python/Lib/site-packages/
+app/
+scripts/windows/start-atas.cmd
+```
+
+Uso:
+
+1. Descomprima el ZIP.
+2. Ejecute `scripts\windows\start-atas.cmd`.
+3. Atas abre `http://127.0.0.1:8787/`.
+
+El workflow extrae el ZIP en un directorio limpio, ejecuta el Python embebido y exige que `/health` responda `status=ok` y `service=Atas` antes de publicar el artifact.
