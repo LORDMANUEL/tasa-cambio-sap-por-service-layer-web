@@ -101,7 +101,16 @@ def test_full_setup_multi_company_and_navigation(monkeypatch):
           'source_type':['WEB_HTML','WEB_HTML','WEB_HTML'],'source_url':['https://one.test','https://two.test','https://three.test'],
           'source_config':['{"mode":"AUTO","currencies":["USD","EUR"]}']*3
         }
-        monkeypatch.setattr(m,'fetch_source',lambda src,settings: object())
+        monkeypatch.setattr(
+            m,'fetch_source',
+            lambda src,settings: __import__('types').SimpleNamespace(
+                code=src['code'],
+                rates={
+                    'USD':{'buy':Decimal('26.90'),'sell':Decimal('27.02')},
+                    'EUR':{'buy':Decimal('30.10'),'sell':Decimal('33.90')},
+                },
+            ),
+        )
         r=client.post('/setup',data=data,follow_redirects=False)
         assert r.status_code==303 and r.headers['location']=='/?welcome=1'
         rows=st.list_companies(); assert len(rows)==2
@@ -385,7 +394,16 @@ def test_setup_can_reuse_preexisting_sources_after_partial_attempt(monkeypatch):
             st.upsert_bank_source(source_id=None,code=code,name=code,country='HN',source_type='WEB_HTML',url=f'https://{code.lower()}.test',enabled=True,config_json='{"mode":"AUTO","currencies":["USD"]}')
         monkeypatch.setattr(m,'store',st)
         monkeypatch.setattr(m,'_set_env_value',lambda k,v:None)
-        monkeypatch.setattr(m,'fetch_source',lambda src,settings: object())
+        monkeypatch.setattr(
+            m,'fetch_source',
+            lambda src,settings: __import__('types').SimpleNamespace(
+                code=src['code'],
+                rates={
+                    'USD':{'buy':Decimal('26.90'),'sell':Decimal('27.02')},
+                    'EUR':{'buy':Decimal('30.10'),'sell':Decimal('33.90')},
+                },
+            ),
+        )
         m.settings.web_session_secret='s'*48
         client=TestClient(m.app)
         data={

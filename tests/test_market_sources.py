@@ -80,7 +80,13 @@ def test_bank_source_web_crud_and_preview(monkeypatch):
         client=TestClient(m.app)
         login=client.post('/login',data={'user':'admin','password':'admin123'},follow_redirects=False)
         cookie=login.cookies.get(m.COOKIE); headers={'cookie':f'{m.COOKIE}={cookie}'}
-        monkeypatch.setattr(m,'fetch_source',lambda src,settings: object())
+        monkeypatch.setattr(
+            m,'fetch_source',
+            lambda src,settings: __import__('types').SimpleNamespace(
+                code=src['code'],
+                rates={'USD':{'buy':Decimal('26.90'),'sell':Decimal('27.02')}},
+            ),
+        )
         r=client.post('/banks/save',headers=headers,data={'code':'BANKX','name':'Banco X','country':'CR','source_type':'WEB_HTML','url':'https://bank.test/fx','config_json':'{"mode":"AUTO","currencies":["USD"]}','headers_json':'{}','timeout_seconds':'10','enabled':'on','tls_verify':'on'},follow_redirects=False)
         assert r.status_code==303
         assert st.get_bank_source_by_code('BANKX')['last_status']=='OK'
