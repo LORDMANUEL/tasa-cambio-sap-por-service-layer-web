@@ -62,39 +62,100 @@ def _official_rates(comparison) -> dict[str,Decimal]:
 
 
 def inspect_company(settings:Settings, store:Store, company_id:int) -> dict:
-    """Read SAP + bank rates without writing anything, including PROD."""
+    """Read SAP first, then enrich with bank consensus without ever writing."""
     row=store.get_company(company_id)
-    if not row: raise ValueError('Compañía no encontrada')
-    result={'company':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'rates':{},'read_only':True}
+    if not row:
+        raise ValueError('Compañía no encontrada')
+    result={
+        'company':row['database_name'],
+        'company_name':row['company_name'],
+        'environment':row['environment'],
+        'rates':{},
+        'read_only':True,
+    }
     try:
-        comparison=_comparison(settings,store,row)
-        result['warnings']=comparison.warnings; result['bank_safe']=comparison.safe
-        result['market_sources']=comparison.successful_sources; result['market_failed']=comparison.failed_sources
-        if not comparison.safe:
-            result['error']='BANK_VALIDATION_FAILED'; return result
-        official=_official_rates(comparison); password=_password(row)
+        password=_password(row)
         sap_url=_sap_url(settings,store,row)
         today=datetime.now(ZoneInfo(settings.timezone)).date()
+        currencies=_currencies(row)
+        sap_rates={}
         company=SapCompany(row['database_name'],row['environment'],False)
-        with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=settings.sap_verify_tls,timeout=settings.sap_timeout_seconds) as sap:
+        with SapFxClient(
+            sap_url,company,row['sap_user'],password,
+            verify_tls=settings.sap_verify_tls,
+            timeout=settings.sap_timeout_seconds,
+        ) as sap:
             result['local_currency']=sap.get_local_currency()
-            for cur in _currencies(row):
-                before=sap.get_currency_rate(cur,today); bank=official[cur]; decision=decide_rate_action(before,bank)
-                result['rates'][cur]={
-                    'sap':str(before),'bank':str(bank),'decision':decision.action,
-                    'missing':before==0,'matches':decision.action=='MATCH',
-                    'can_test_write': row['environment']=='TEST' and bool(row.get('allow_write')) and decision.action!='MATCH',
-                    'can_prod_write': row['environment']=='PROD' and store.get_settings().get('prod_automation_enabled','false').lower()=='true' and bool(row.get('scheduled_write')) and decision.action!='MATCH'
-                }
-                store.add_transaction({
-                    'company_id':row['id'],'company_db':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],
-                    'currency':cur,'primary_bank':row['primary_bank'],'secondary_bank':row['secondary_bank'],'sap_before':str(before),'bank_rate':str(bank),
-                    'sap_after':str(before),'decision':'INSPECT_'+decision.action,'status':'READ_ONLY','verified':1,'details_json':'web-test'
-                })
+            for cur in currencies:
+                sap_rates[cur]=sap.get_currency_rate(cur,today)
+
+        # Bank problems must never prevent the user from validating SAP read access.
+        try:
+            comparison=_comparison(settings,store,row)
+            result['warnings']=comparison.warnings
+            result['bank_safe']=comparison.safe
+            result['market_sources']=comparison.successful_sources
+            result['market_failed']=comparison.failed_sources
+        except Exception as exc:
+            log.exception('Bank comparison failed during SAP inspection company=%s',row['database_name'])
+            comparison=None
+            result['warnings']=[str(exc)]
+            result['bank_safe']=False
+            result['market_sources']=[]
+            result['market_failed']={}
+        if not result['bank_safe']:
+            result['bank_error']='BANK_VALIDATION_FAILED'
+
+        official=_official_rates(comparison) if comparison and comparison.safe else {}
+        for cur in currencies:
+            before=sap_rates[cur]
+            bank=official.get(cur)
+            if bank is None:
+                decision_action='BANK_BLOCKED'
+                matches=False
+                can_test=False
+                can_prod=False
+            else:
+                decision=decide_rate_action(before,bank)
+                decision_action=decision.action
+                matches=decision.action=='MATCH'
+                can_test=row['environment']=='TEST' and bool(row.get('allow_write')) and not matches
+                can_prod=(
+                    row['environment']=='PROD'
+                    and store.get_settings().get('prod_automation_enabled','false').lower()=='true'
+                    and bool(row.get('scheduled_write'))
+                    and not matches
+                )
+            result['rates'][cur]={
+                'sap':str(before),
+                'bank':str(bank) if bank is not None else None,
+                'decision':decision_action,
+                'missing':before==0,
+                'matches':matches,
+                'can_test_write':can_test,
+                'can_prod_write':can_prod,
+            }
+            store.add_transaction({
+                'company_id':row['id'],
+                'company_db':row['database_name'],
+                'company_name':row['company_name'],
+                'environment':row['environment'],
+                'currency':cur,
+                'primary_bank':row['primary_bank'],
+                'secondary_bank':row['secondary_bank'],
+                'sap_before':str(before),
+                'bank_rate':str(bank) if bank is not None else None,
+                'sap_after':str(before),
+                'decision':'INSPECT_'+decision_action,
+                'status':'READ_ONLY' if bank is not None else 'READ_ONLY_BANK_BLOCKED',
+                'verified':1,
+                'details_json':'web-test',
+            })
         return result
     except Exception as exc:
-        log.exception('Company inspection failed company=%s',row['database_name']); result['error']=str(exc); return result
-
+        log.exception('Company inspection failed company=%s',row['database_name'])
+        result['error']=str(exc)
+        return result
 
 def write_suggested_test(settings:Settings, store:Store, company_id:int, currency:str) -> dict:
     """Write the current official-bank suggestion to a TEST company and verify it."""

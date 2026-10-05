@@ -350,15 +350,24 @@ def company_test(company_id:int,req:Request):
     c=store.get_company(company_id)
     if not c: return HTMLResponse('No encontrada',404)
     result=inspect_company(settings,store,company_id)
-    if result.get('error'): return HTMLResponse(_ui('Prueba SAP',page_header('Prueba SAP',c['company_name'])+f"<div class='card error-panel'><h2>No se pudo completar</h2><p>{esc(result['error'])}</p><a class='btn' href='/companies'>Volver</a></div>"))
+    if result.get('error'):
+        return HTMLResponse(_ui('Prueba SAP',page_header('Prueba SAP',c['company_name'])+f"<div class='card error-panel'><h2>No se pudo leer SAP</h2><p>{esc(result['error'])}</p><a class='btn' href='/companies'>Volver</a></div>"))
     ratecards=''
     for cur,data in result.get('rates',{}).items():
-        can_write=data.get('can_test_write') or data.get('can_prod_write'); action=''
-        if can_write and not data.get('matches'):
+        can_write=data.get('can_test_write') or data.get('can_prod_write')
+        action=''
+        bank_available=data.get('bank') is not None
+        if can_write and bank_available and not data.get('matches'):
             action=f"<form method='post' action='/companies/{company_id}/write/{cur}' data-process='Aplicando tasa {cur} en SAP' data-process-detail='Validando banco, escribiendo en SAP y verificando la lectura posterior.'><button class='btn primary'>Aplicar tasa bancaria ahora</button></form>"
-        ratecards+=f"<div class='rate-card'><div class='section-title'><h2>{cur}</h2>{badge('COINCIDE' if data['matches'] else 'SIN TASA' if data['missing'] else 'DIFERENCIA')}</div><div class='rate-values'><div><span>SAP hoy</span><b>{esc(data['sap'])}</b></div><div><span>Banco oficial</span><b>{esc(data['bank'])}</b></div></div><p>{'La tasa ya coincide.' if data['matches'] else 'Se sugiere la tasa del banco oficial.'}</p>{action}</div>"
+        state='COINCIDE' if data['matches'] else ('BANCO BLOQUEADO' if not bank_available else 'SIN TASA' if data['missing'] else 'DIFERENCIA')
+        message='La tasa ya coincide.' if data['matches'] else ('SAP respondió correctamente, pero no se puede sugerir/escribir hasta corregir las fuentes bancarias.' if not bank_available else 'Se sugiere la tasa del banco oficial.')
+        ratecards+=f"<div class='rate-card'><div class='section-title'><h2>{cur}</h2>{badge(state)}</div><div class='rate-values'><div><span>SAP hoy</span><b>{esc(data['sap'])}</b></div><div><span>Banco oficial</span><b>{esc(data['bank'] if bank_available else '—')}</b></div></div><p>{message}</p>{action}</div>"
     gate='PRODUCCIÓN HABILITADA' if any(d.get('can_prod_write') for d in result.get('rates',{}).values()) else ('PRODUCCIÓN · SOLO LECTURA' if c['environment']=='PROD' else 'BASE DE PRUEBA')
-    body=page_header('Prueba SAP',f"{c['company_name']} · {c['database_name']}","<a class='btn secondary' href='/companies'>Volver</a>")+f"<div class='callout info'><b>{gate}</b> · Endpoint: {esc(_effective_company_endpoint(c))}</div><div class='rate-grid'>{ratecards}</div>"
+    bank_notice=''
+    if result.get('bank_error'):
+        warning_text='; '.join(result.get('warnings') or ['Las fuentes bancarias no pasaron la validación.'])
+        bank_notice=f"<div class='callout info'><b>SAP EN LECTURA: OK · BANCOS: BLOQUEADOS</b><br>{esc(warning_text)}</div>"
+    body=page_header('Prueba SAP',f"{c['company_name']} · {c['database_name']}","<a class='btn secondary' href='/companies'>Volver</a>")+f"<div class='callout info'><b>{gate}</b> · Endpoint: {esc(_effective_company_endpoint(c))}</div>{bank_notice}<div class='rate-grid'>{ratecards}</div>"
     return HTMLResponse(_ui('Prueba SAP',body))
 
 @app.post('/companies/{company_id}/write/{currency}')
