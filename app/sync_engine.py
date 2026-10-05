@@ -310,7 +310,7 @@ def run_due_schedules(settings:Settings, store:Store) -> list[dict]:
     now=datetime.now(ZoneInfo(settings.timezone)); today=now.date().isoformat(); out=[]
     for row in store.list_companies(enabled_only=True):
         if not row.get('auto_enabled'): continue
-        if row.get('last_run_date')==today: continue
+        if row.get('scheduler_claim_date')==today: continue
         due=(now.hour,now.minute) >= (int(row.get('schedule_hour') or 0),int(row.get('schedule_minute') or 0))
         if not due: continue
         if not store.claim_daily_run(row['id'],today):

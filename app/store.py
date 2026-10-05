@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS companies (
   use_usd INTEGER NOT NULL DEFAULT 1,
   use_eur INTEGER NOT NULL DEFAULT 1,
   last_run_date TEXT,
+  scheduler_claim_date TEXT,
   last_run_at TEXT,
   last_run_status TEXT,
   last_run_message TEXT,
@@ -130,6 +131,7 @@ class Store:
 
     def _migrate_companies(self, con: sqlite3.Connection) -> None:
         existing = {r[1] for r in con.execute("PRAGMA table_info(companies)").fetchall()}
+        scheduler_claim_is_new = "scheduler_claim_date" not in existing
         additions = {
             "db_type": "TEXT NOT NULL DEFAULT 'HANA'",
             "scheduled_write": "INTEGER NOT NULL DEFAULT 0",
@@ -139,6 +141,7 @@ class Store:
             "use_usd": "INTEGER NOT NULL DEFAULT 1",
             "use_eur": "INTEGER NOT NULL DEFAULT 1",
             "last_run_date": "TEXT",
+            "scheduler_claim_date": "TEXT",
             "last_run_at": "TEXT",
             "last_run_status": "TEXT",
             "last_run_message": "TEXT",
@@ -151,6 +154,13 @@ class Store:
         for name, ddl in additions.items():
             if name not in existing:
                 con.execute(f"ALTER TABLE companies ADD COLUMN {name} {ddl}")
+        if scheduler_claim_is_new:
+            # Preserve V5.0.1 daily-run state during upgrade so the migration itself
+            # cannot trigger an additional automatic execution on the same day.
+            con.execute(
+                "UPDATE companies SET scheduler_claim_date=last_run_date "
+                "WHERE scheduler_claim_date IS NULL AND last_run_date IS NOT NULL"
+            )
 
     def initialize(self) -> None:
         with self.conn() as con:
@@ -250,9 +260,9 @@ class Store:
         with self.conn() as con:
             cur=con.execute(
                 """UPDATE companies
-                   SET last_run_date=?, last_run_at=?, last_run_status='RUNNING',
+                   SET scheduler_claim_date=?, last_run_at=?, last_run_status='RUNNING',
                        last_run_message='Ejecución diaria reclamada', updated_at=?
-                   WHERE id=? AND COALESCE(last_run_date,'')<>?""",
+                   WHERE id=? AND COALESCE(scheduler_claim_date,'')<>?""",
                 (day,now,now,company_id,day)
             )
             return cur.rowcount==1
