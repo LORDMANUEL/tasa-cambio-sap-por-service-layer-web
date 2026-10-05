@@ -1,4 +1,4 @@
-name: Build installers
+name: Build Atas installers
 
 on:
   push:
@@ -50,11 +50,22 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist/installer | Out-Null
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer/windows/SAPFXControlCenter.iss "/DSourceDir=$pwd\dist\windows-package" "/DOutputDir=$pwd\dist\installer"
+      - name: Inspect Windows package
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist/installer/*.exe | Select-Object -First 1
+          if (-not $exe) { throw "Atas EXE not found" }
+          Write-Host "ATAS_WINDOWS_EXE=$($exe.Name)"
+          Write-Host "ATAS_WINDOWS_EXE_BYTES=$($exe.Length)"
+          Get-FileHash $exe.FullName -Algorithm SHA256
+          if (-not (Test-Path dist/windows-package/runtime/python/python.exe)) { throw "Embedded Python missing" }
+          if (-not (Test-Path dist/windows-package/app/main.py)) { throw "Application payload missing" }
       - uses: actions/upload-artifact@v4
         with:
-          name: SAP-FX-Control-Center-Windows-x64
+          name: Atas-Windows-x64
           path: dist/installer/*.exe
           if-no-files-found: error
+
   debian-deb:
     runs-on: ubuntu-latest
     steps:
@@ -65,7 +76,7 @@ jobs:
           cache: pip
       - name: Test application
         env:
-          SAPFX_FERNET_KEY_FILE: ${{ runner.temp }}/sapfx-ci.key
+          SAPFX_FERNET_KEY_FILE: ${{ runner.temp }}/atas-ci.key
         run: |
           python -m pip install -r requirements.txt
           python -m compileall -q app
@@ -74,8 +85,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rsync dpkg-dev
       - name: Build DEB
         run: VERSION=5.0.0 ./scripts/build_deb.sh
+      - name: Inspect Debian package
+        run: |
+          DEB=$(ls dist/atas_*.deb | head -1)
+          test -n "$DEB"
+          dpkg-deb --info "$DEB"
+          dpkg-deb --contents "$DEB" | grep -q '/opt/atas/'
+          echo "ATAS_DEB=$(basename "$DEB")"
+          echo "ATAS_DEB_BYTES=$(stat -c%s "$DEB")"
+          sha256sum "$DEB"
       - uses: actions/upload-artifact@v4
         with:
-          name: SAP-FX-Control-Center-Debian-amd64
+          name: Atas-Debian-amd64
           path: dist/*.deb
           if-no-files-found: error
