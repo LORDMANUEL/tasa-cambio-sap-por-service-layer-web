@@ -103,6 +103,7 @@ jobs:
           Expand-Archive $portableZip -DestinationPath $target -Force
           if (-not (Test-Path "$target\runtime\python\python.exe")) { throw "Portable embedded Python missing" }
           if (-not (Test-Path "$target\app\main.py")) { throw "Portable Atas application missing" }
+          if (-not (Test-Path "$target\ATAS.bat")) { throw "Portable root launcher missing" }
           $stdout = Join-Path $env:RUNNER_TEMP 'atas-portable-out.log'
           $stderr = Join-Path $env:RUNNER_TEMP 'atas-portable-err.log'
           $proc = Start-Process -FilePath "$target\runtime\python\python.exe" -ArgumentList '-m','app.run_server' -WorkingDirectory $target -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
@@ -122,6 +123,11 @@ jobs:
               if (Test-Path $stderr) { Get-Content $stderr }
               throw "Atas portable ZIP did not pass /health smoke test"
             }
+            Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',('"'+(Join-Path $target 'ATAS.bat')+'"') -WorkingDirectory $target -Wait
+            Start-Sleep -Seconds 1
+            $h2 = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/health' -TimeoutSec 2
+            if ($h2.status -ne 'ok') { throw "Portable ATAS.bat launcher failed" }
+            Write-Host "ATAS_PORTABLE_ROOT_LAUNCHER=OK"
             Write-Host "ATAS_PORTABLE_SMOKE=OK"
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
