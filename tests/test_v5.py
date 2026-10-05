@@ -248,3 +248,95 @@ def test_packaging_versions_are_not_hardcoded_to_500():
     assert 'VERSION=5.0.0 ./scripts/build_deb.sh' not in workflow
     assert 'version=5.0.0' not in workflow
     assert 'VERSION.txt' in deb
+
+
+def test_run_status_prioritizes_blocked_over_match():
+    import app.sync_engine as se
+    status,message=se._run_status({'rates':{
+        'USD':{'status':'MATCH'},
+        'EUR':{'status':'UPDATE_WRITE_BLOCKED'},
+    }})
+    assert status=='BLOCKED'
+    assert 'UPDATE_WRITE_BLOCKED' in message
+
+
+def test_reconcile_records_bank_validation_failure_once(monkeypatch):
+    import app.sync_engine as se
+    from app.config import Settings
+    from types import SimpleNamespace
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'audit.db')
+        cid=add_company(st,bank_source_codes='A,B,C',primary_bank='A',secondary_bank='B')
+        fake=SimpleNamespace(
+            safe=False,
+            warnings=['simulated unsafe consensus'],
+            official_rates={},
+            successful_sources=['A','B','C'],
+            failed_sources={},
+        )
+        monkeypatch.setattr(se,'_comparison',lambda settings,store,row:fake)
+        result=se.reconcile_company(Settings(),st,cid,scheduled=True)
+        assert result['error']=='BANK_VALIDATION_FAILED'
+        assert result['error_recorded'] is True
+        errors=[x for x in st.list_transactions(20) if x['status']=='ERROR']
+        assert len(errors)==1
+        assert errors[0]['decision']=='BANK-VALIDATION'
+
+
+def test_reconcile_records_missing_credentials_once(monkeypatch):
+    import app.sync_engine as se
+    from app.config import Settings
+    from types import SimpleNamespace
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'audit.db')
+        cid=add_company(st,bank_source_codes='A,B,C',primary_bank='A',secondary_bank='B')
+        fake=SimpleNamespace(
+            safe=True,
+            warnings=[],
+            official_rates={'USD':Decimal('27.02'),'EUR':Decimal('33.90')},
+            successful_sources=['A','B','C'],
+            failed_sources={},
+        )
+        monkeypatch.setattr(se,'_comparison',lambda settings,store,row:fake)
+        result=se.reconcile_company(Settings(),st,cid,scheduled=True)
+        assert result['error']=='SAP_PASSWORD_NOT_CONFIGURED'
+        assert result['error_recorded'] is True
+        errors=[x for x in st.list_transactions(20) if x['status']=='ERROR']
+        assert len(errors)==1
+        assert errors[0]['decision']=='CREDENTIALS'
+
+
+def test_sap_odata_v1_uses_post_function_import():
+    c=SapFxClient('https://sap.invalid/b1s/v1',SapCompany('TEST','TEST',True),'u','p',verify_tls=False)
+    c.logged_in=True
+    ok=requests.Response(); ok.status_code=200; ok._content=b'27.027000'; ok.headers['Content-Type']='application/json'
+    calls={}
+    def fake_post(url,**kwargs):
+        calls['url']=url
+        calls['json']=kwargs.get('json')
+        return ok
+    c.session.post=fake_post
+    value=c.get_currency_rate('USD',date(2026,10,2))
+    assert value==Decimal('27.027000')
+    assert calls['url'].endswith('/v1/SBOBobService_GetCurrencyRate')
+    assert calls['json']=={'Currency':'USD','Date':'20261002'}
+
+
+def test_sap_odata_v1_minus4006_is_missing_rate():
+    c=SapFxClient('https://sap.invalid/b1s/v1',SapCompany('TEST','TEST',True),'u','p',verify_tls=False)
+    c.logged_in=True
+    missing=requests.Response(); missing.status_code=400
+    missing._content=b'{"error":{"code":"-4006","message":"Update the exchange rate"}}'
+    missing.headers['Content-Type']='application/json'
+    c.session.post=lambda *a,**k:missing
+    assert c.get_currency_rate('EUR',date(2026,10,2))==Decimal('0')
+
+
+def test_sap_set_rate_rejects_invalid_currency_code():
+    c=SapFxClient('https://sap.invalid/b1s/v2',SapCompany('TEST','TEST',True),'u','p',verify_tls=False)
+    c.logged_in=True
+    try:
+        c.set_currency_rate("USD'BAD",date(2026,10,2),Decimal('27.1'))
+        assert False
+    except Exception as exc:
+        assert 'Código de moneda inválido' in str(exc)
