@@ -71,7 +71,7 @@ Banco/API oficial + 2 o más fuentes de control
 
 ### Windows x64
 
-El workflow **Build installers** genera un `.exe` que incluye:
+El workflow **Build Atas installers** genera un `.exe` que incluye:
 
 - Python 3.13 embebido.
 - Dependencias Python preinstaladas.

@@ -1,6 +1,6 @@
 # Instalación en Windows
 
-La distribución de Windows se genera como `SAP-FX-Control-Center-V5-Setup-x64.exe`.
+La distribución de Windows se genera como `Atas-V5-Setup-x64.exe`.
 
 ## Qué incluye
 
