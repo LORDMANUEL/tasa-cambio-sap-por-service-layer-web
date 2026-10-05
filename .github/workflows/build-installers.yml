@@ -253,3 +253,75 @@ jobs:
             dist/*.deb
             dist/BUILD_INFO_DEBIAN.txt
           if-no-files-found: error
+
+
+  release:
+    name: publish-release
+    needs: [windows-exe, debian-deb]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(tr -d '\r\n ' < VERSION.txt)"
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "VERSION.txt is not a release semver: $VERSION"
+          fi
+      - name: Download Windows installer
+        if: steps.version.outputs.publish == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: Atas-Windows-x64
+          path: dist/release/windows-installer
+      - name: Download Windows portable
+        if: steps.version.outputs.publish == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: Atas-Windows-Portable-x64
+          path: dist/release/windows-portable
+      - name: Download Debian package
+        if: steps.version.outputs.publish == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: Atas-Debian-amd64
+          path: dist/release/debian
+      - name: Publish GitHub Release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t FILES < <(find dist/release -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.deb' -o -name 'BUILD_INFO*.txt' \) | sort)
+          if [ "${#FILES[@]}" -lt 3 ]; then
+            echo "Release assets are incomplete."
+            find dist/release -type f -maxdepth 4 -print
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            git fetch --tags --force
+            TAG_SHA="$(git rev-list -n 1 "$TAG" 2>/dev/null || true)"
+            if [ "$TAG_SHA" != "$GITHUB_SHA" ]; then
+              echo "Release $TAG already belongs to $TAG_SHA; keeping it immutable. Bump VERSION.txt for the next release."
+              exit 0
+            fi
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+            gh release edit "$TAG" --title "Atas V$VERSION" --notes-file "docs/RELEASE_NOTES_V5.0.0.md" --latest
+          else
+            gh release create "$TAG" "${FILES[@]}" --target "$GITHUB_SHA" --title "Atas V$VERSION" --notes-file "docs/RELEASE_NOTES_V5.0.0.md" --latest
+          fi
+          echo "ATAS_RELEASE=https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
