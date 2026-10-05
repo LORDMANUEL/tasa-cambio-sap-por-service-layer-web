@@ -161,6 +161,7 @@ class Store:
                 "service_layer_root": "",
                 "odata_version": "v2",
                 "sap_b1_version": "10.0",
+                "sap_verify_tls": "false",
                 "organization_name": "Mi Empresa",
                 "organization_logo": "",
                 "setup_complete": "false",

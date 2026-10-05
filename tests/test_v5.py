@@ -560,3 +560,14 @@ def test_manual_prod_reconcile_requires_global_and_company_write_gate():
         row=st.get_company(cid)
         assert se._manual_reconcile_write_allowed(st,row) is True
         assert se._scheduled_write_allowed(st,row) is False
+
+
+def test_sap_tls_verification_can_be_configured_from_store():
+    import app.sync_engine as se
+    from app.config import Settings
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'tls.db')
+        st.set_settings({'sap_verify_tls':'true'})
+        assert se._sap_verify_tls(Settings(),st) is True
+        st.set_settings({'sap_verify_tls':'false'})
+        assert se._sap_verify_tls(Settings(),st) is False

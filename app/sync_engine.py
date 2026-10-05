@@ -48,6 +48,13 @@ def _currencies(row:dict) -> list[str]:
     return out or ['USD']
 
 
+def _sap_verify_tls(settings:Settings, store:Store) -> bool:
+    value=store.get_settings().get('sap_verify_tls')
+    if value is None:
+        return bool(settings.sap_verify_tls)
+    return str(value).strip().lower() in {'1','true','yes','on'}
+
+
 def _password(row:dict) -> str:
     if not row.get('sap_secret'): raise CredentialError('SAP_PASSWORD_NOT_CONFIGURED')
     return decrypt_secret(row['sap_secret'])
@@ -82,7 +89,7 @@ def inspect_company(settings:Settings, store:Store, company_id:int) -> dict:
         company=SapCompany(row['database_name'],row['environment'],False)
         with SapFxClient(
             sap_url,company,row['sap_user'],password,
-            verify_tls=settings.sap_verify_tls,
+            verify_tls=_sap_verify_tls(settings,store),
             timeout=settings.sap_timeout_seconds,
         ) as sap:
             result['local_currency']=sap.get_local_currency()
@@ -170,7 +177,7 @@ def write_suggested_test(settings:Settings, store:Store, company_id:int, currenc
     bank=_official_rates(comparison)[cur]; password=_password(row)
     sap_url=_sap_url(settings,store,row)
     today=datetime.now(ZoneInfo(settings.timezone)).date(); company=SapCompany(row['database_name'],'TEST',True)
-    with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=settings.sap_verify_tls,timeout=settings.sap_timeout_seconds) as sap:
+    with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=_sap_verify_tls(settings,store),timeout=settings.sap_timeout_seconds) as sap:
         before=sap.get_currency_rate(cur,today); sap.set_currency_rate(cur,today,bank); after=sap.get_currency_rate(cur,today)
         if after!=bank: raise SapError(f'Verificación fallida: esperado {bank}, leído {after}')
     status='CREATED_VERIFIED' if before==0 else 'UPDATED_VERIFIED'
@@ -198,7 +205,7 @@ def write_suggested_manual(settings:Settings, store:Store, company_id:int, curre
     bank=_official_rates(comparison)[cur]; password=_password(row)
     sap_url=_sap_url(settings,store,row)
     today=datetime.now(ZoneInfo(settings.timezone)).date(); company=SapCompany(row['database_name'],row['environment'],True)
-    with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=settings.sap_verify_tls,timeout=settings.sap_timeout_seconds) as sap:
+    with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=_sap_verify_tls(settings,store),timeout=settings.sap_timeout_seconds) as sap:
         before=sap.get_currency_rate(cur,today)
         if before==bank:
             after=before; status='MATCH'
@@ -250,7 +257,7 @@ def reconcile_company(settings:Settings, store:Store, company_id:int, *, schedul
     allowed=_scheduled_write_allowed(store,row) if scheduled else _manual_reconcile_write_allowed(store,row)
     company=SapCompany(row['database_name'],row['environment'],allowed)
     try:
-        with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=settings.sap_verify_tls,timeout=settings.sap_timeout_seconds) as sap:
+        with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=_sap_verify_tls(settings,store),timeout=settings.sap_timeout_seconds) as sap:
             for cur in _currencies(row):
                 before=sap.get_currency_rate(cur,today); bank=official[cur]; decision=decide_rate_action(before,bank)
                 tx={'company_id':row['id'],'company_db':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'currency':cur,'primary_bank':row['primary_bank'],'secondary_bank':row['secondary_bank'],'sap_before':str(before),'bank_rate':str(bank),'decision':decision.action}
