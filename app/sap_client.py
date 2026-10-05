@@ -1,7 +1,8 @@
 """Cliente SAP Business One Service Layer para SAP FX Control Center V5.
 
 Contrato validado contra el $metadata del sistema y probado manualmente en Postman:
-- Lectura: GET /b1s/v2/SBOBobService_GetCurrencyRate(Currency='USD',Date='YYYYMMDD')
+- OData v2 lectura: GET /b1s/v2/SBOBobService_GetCurrencyRate(Currency='USD',Date='YYYYMMDD')
+- OData v1 lectura: POST /b1s/v1/SBOBobService_GetCurrencyRate con Currency/Date
 - Ausencia: HTTP 400, error.code == -4006, message == 'Update the exchange rate'
 - Escritura: POST /b1s/v2/SBOBobService_SetCurrencyRate
 - Verificación: repetir el GET y comparar el Edm.Double devuelto.
@@ -86,9 +87,17 @@ class SapFxClient:
             self.logged_in = False
             self.session.close()
 
+    @property
+    def odata_version(self) -> str:
+        match = re.search(r"/(v\d+)$", self.base_url, re.I)
+        return match.group(1).lower() if match else "v2"
+
     def get_local_currency(self) -> str:
         self._ensure_login()
-        r = self._request("GET", "SBOBobService_GetLocalCurrency()")
+        if self.odata_version == "v1":
+            r = self._request("POST", "SBOBobService_GetLocalCurrency", payload={})
+        else:
+            r = self._request("GET", "SBOBobService_GetLocalCurrency()")
         return str(_extract_scalar(r, text_ok=True)).strip()
 
     def get_currency_rate(self, currency: str, rate_date: date) -> Decimal:
@@ -101,12 +110,25 @@ class SapFxClient:
         if not re.fullmatch(r"[A-Z]{3}", cur):
             raise SapError(f"Código de moneda inválido: {currency!r}")
         ymd = rate_date.strftime("%Y%m%d")
-        endpoint = f"SBOBobService_GetCurrencyRate(Currency='{cur}',Date='{ymd}')"
-        try:
-            r = self.session.get(self._url(endpoint), headers={"Accept": "application/json"},
-                                 timeout=self.timeout, verify=self.verify_tls)
-        except requests.RequestException as exc:
-            raise SapError(f"Error de red leyendo {cur}: {exc}") from exc
+        if self.odata_version == "v1":
+            endpoint = "SBOBobService_GetCurrencyRate"
+            try:
+                r = self.session.post(
+                    self._url(endpoint),
+                    json={"Currency": cur, "Date": ymd},
+                    headers={"Accept": "application/json", "Content-Type": "application/json"},
+                    timeout=self.timeout,
+                    verify=self.verify_tls,
+                )
+            except requests.RequestException as exc:
+                raise SapError(f"Error de red leyendo {cur}: {exc}") from exc
+        else:
+            endpoint = f"SBOBobService_GetCurrencyRate(Currency='{cur}',Date='{ymd}')"
+            try:
+                r = self.session.get(self._url(endpoint), headers={"Accept": "application/json"},
+                                     timeout=self.timeout, verify=self.verify_tls)
+            except requests.RequestException as exc:
+                raise SapError(f"Error de red leyendo {cur}: {exc}") from exc
 
         if r.status_code == 200:
             value = _extract_scalar(r, text_ok=False)
@@ -129,6 +151,8 @@ class SapFxClient:
         if rate <= 0:
             raise SapError("La tasa a escribir debe ser mayor que cero.")
         cur = currency.upper().strip()
+        if not re.fullmatch(r"[A-Z]{3}", cur):
+            raise SapError(f"Código de moneda inválido: {currency!r}")
         payload = {"RateDate": rate_date.strftime("%Y%m%d"), "Currency": cur, "Rate": format(rate, "f")}
         r = self._request("POST", "SBOBobService_SetCurrencyRate", payload=payload)
         log.info("SAP rate write accepted company=%s currency=%s date=%s status=%s",
