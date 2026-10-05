@@ -85,7 +85,7 @@ El `.deb`:
 
 - Declara Python 3 como dependencia APT.
 - Crea su entorno virtual automáticamente.
-- Incluye wheels de las dependencias Python.
+- Crea un entorno virtual aislado e instala las dependencias Python durante la instalación.
 - Instala un servicio `systemd`.
 - Crea rutas persistentes para configuración, DB y logs.
 
