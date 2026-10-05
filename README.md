@@ -11,9 +11,10 @@ El proyecto consulta fuentes bancarias o APIs, exige un consenso mínimo, compar
 
 ## Estado del proyecto
 
+**Sitio oficial:** https://lordmanuel.github.io/tasa-cambio-sap-por-service-layer-web/
+
 [![CI](https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/actions/workflows/ci.yml/badge.svg)](https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/actions/workflows/ci.yml)
 [![Build installers](https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/actions/workflows/build-installers.yml/badge.svg)](https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/actions/workflows/build-installers.yml)
-[![Pages](https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/actions/workflows/pages.yml/badge.svg)](https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/actions/workflows/pages.yml)
 
 ## Funciones principales
 
@@ -178,7 +179,7 @@ CI ejecuta la suite en Windows y Ubuntu.
 
 ## GitHub Pages
 
-El sitio de presentación se encuentra en `site/` y se publica mediante `.github/workflows/pages.yml`. URL prevista: `https://lordmanuel.github.io/tasa-cambio-sap-por-service-layer-web/`.
+El sitio de presentación se encuentra en `site/`. El workflow `.github/workflows/publish-pages.yml` sincroniza esa carpeta con `gh-pages`, y GitHub Pages publica automáticamente: https://lordmanuel.github.io/tasa-cambio-sap-por-service-layer-web/
 
 ## Nota sobre SAP
 
