@@ -500,98 +500,130 @@ def settings_page(req:Request):
 
 @app.post('/settings/general')
 async def settings_general(req:Request, logo:UploadFile|None=File(default=None)):
-    if not _authed(req): return _redirect_login()
+    if not _authed(req):
+        return _redirect_login()
     f=await req.form()
     try:
-        root=re.sub(r'/v\d+
-
-async def _save_notification_form(form):
-    vals={'notifications_enabled':'true' if 'notifications_enabled' in form else 'false','smtp_host':str(form.get('smtp_host','')).strip(),'smtp_port':str(form.get('smtp_port','587')).strip(),'smtp_security':str(form.get('smtp_security','STARTTLS')).strip(),'smtp_user':str(form.get('smtp_user','')).strip(),'smtp_from':str(form.get('smtp_from','')).strip(),'notification_recipients':str(form.get('notification_recipients','')).strip()}
-    pwd=str(form.get('smtp_password',''))
-    if pwd: vals['smtp_secret']=encrypt_secret(pwd)
-    store.set_settings(vals)
-
-@app.post('/settings/notifications')
-async def settings_notifications(req:Request):
-    if not _authed(req): return _redirect_login()
-    f=await req.form(); await _save_notification_form(f); return RedirectResponse('/settings',303)
-
-@app.post('/settings/notifications/test',response_class=HTMLResponse)
-async def settings_notifications_test(req:Request):
-    if not _authed(req): return _redirect_login()
-    f=await req.form(); await _save_notification_form(f)
-    try:
-        result=send_email(store,'Prueba Atas',f'Notificación de prueba enviada correctamente desde {_org()}.')
-        if not result.get('sent'): raise ValueError('Active las notificaciones y complete la configuración SMTP antes de probar.')
-    except Exception as exc: return HTMLResponse(_ui('Notificaciones',f"<div class='card error-panel'><h2>No se pudo enviar</h2><p>{esc(exc)}</p><a class='btn' href='/settings'>Volver</a></div>"),400)
-    return HTMLResponse(_ui('Notificaciones',f"<div class='card success-panel'><h2>Correo enviado</h2><p>Destinatarios: {result.get('recipients',0)}</p><a class='btn primary' href='/settings'>Volver</a></div>"))
-
-@app.post('/settings/admin')
-async def settings_admin(req:Request):
-    if not _authed(req): return _redirect_login()
-    f=await req.form(); current=str(f.get('current_password','')); new_user=str(f.get('new_user','')).strip(); new_pwd=str(f.get('new_password',''))
-    if not verify_password(current,settings.web_admin_password_hash): return HTMLResponse(_ui('Configuración',"<div class='card error-panel'><h2>Contraseña actual incorrecta</h2><a class='btn' href='/settings'>Volver</a></div>"),400)
-    if not new_user or len(new_pwd)<6: return HTMLResponse('Datos inválidos',400)
-    h=password_hash(new_pwd); _set_env_value('WEB_ADMIN_USER',new_user); _set_env_value('WEB_ADMIN_PASSWORD_HASH',h); settings.web_admin_user=new_user; settings.web_admin_password_hash=h
-    r=RedirectResponse('/login',303); r.delete_cookie(COOKIE); return r
-
-@app.get('/logs',response_class=HTMLResponse)
-def logs(req:Request):
-    if not _authed(req): return _redirect_login()
-    p=settings.log_path/'sap_fx_service.log'; text='Sin log todavía.'
-    if p.exists(): text=''.join(p.read_text(encoding='utf-8',errors='replace').splitlines(True)[-600:])
-    return HTMLResponse(_ui('Logs',page_header('Logs técnicos','Últimas 600 líneas.')+f"<div class='card'><pre>{esc(text)}</pre></div>"))
-
-@app.get('/health')
-def health(): return {'status':'ok','service':'Atas','version':get_version(),'setup_complete':_setup_complete(),'enabled_companies':len(store.list_companies(True)),'local_only':True}
-,'',str(f.get('service_layer_root','')).strip().rstrip('/'),flags=re.I)
+        root=re.sub(r'/v\\d+$','',str(f.get('service_layer_root','')).strip().rstrip('/'),flags=re.I)
         od=str(f.get('odata_version','v2')).lower()
         tz=str(f.get('timezone',settings.timezone)).strip()
-        if not root.startswith(('http://','https://')) or '/b1s' not in root: raise ValueError('URL de Service Layer inválida.')
-        if od not in {'v1','v2'}: raise ValueError('Versión OData inválida.')
+        if not root.startswith(('http://','https://')) or '/b1s' not in root:
+            raise ValueError('URL de Service Layer inválida.')
+        if od not in {'v1','v2'}:
+            raise ValueError('Versión OData inválida.')
         ZoneInfo(tz)
-        vals={'organization_name':str(f.get('organization_name','')).strip(),'service_layer_root':root,'odata_version':od,'sap_b1_version':str(f.get('sap_b1_version','')).strip(),'sap_base_url':_endpoint(root,od),'timezone':tz}
-        _set_env_value('TIMEZONE',tz); settings.timezone=tz; store.timezone=tz
-        if logo and logo.filename: vals['organization_logo']=_save_logo(logo)
+        vals={
+            'organization_name':str(f.get('organization_name','')).strip(),
+            'service_layer_root':root,
+            'odata_version':od,
+            'sap_b1_version':str(f.get('sap_b1_version','')).strip(),
+            'sap_base_url':_endpoint(root,od),
+            'timezone':tz,
+        }
+        _set_env_value('TIMEZONE',tz)
+        settings.timezone=tz
+        store.timezone=tz
+        if logo and logo.filename:
+            vals['organization_logo']=_save_logo(logo)
         store.set_settings(vals)
     except Exception as exc:
-        return HTMLResponse(_ui('Configuración',f"<div class='card error-panel'><h2>Configuración inválida</h2><p>{esc(exc)}</p><a class='btn' href='/settings'>Volver</a></div>"),400)
+        return HTMLResponse(
+            _ui('Configuración',f"<div class='card error-panel'><h2>Configuración inválida</h2><p>{esc(exc)}</p><a class='btn' href='/settings'>Volver</a></div>"),
+            400,
+        )
     return RedirectResponse('/settings',303)
 
+
 async def _save_notification_form(form):
-    vals={'notifications_enabled':'true' if 'notifications_enabled' in form else 'false','smtp_host':str(form.get('smtp_host','')).strip(),'smtp_port':str(form.get('smtp_port','587')).strip(),'smtp_security':str(form.get('smtp_security','STARTTLS')).strip(),'smtp_user':str(form.get('smtp_user','')).strip(),'smtp_from':str(form.get('smtp_from','')).strip(),'notification_recipients':str(form.get('notification_recipients','')).strip()}
+    vals={
+        'notifications_enabled':'true' if 'notifications_enabled' in form else 'false',
+        'smtp_host':str(form.get('smtp_host','')).strip(),
+        'smtp_port':str(form.get('smtp_port','587')).strip(),
+        'smtp_security':str(form.get('smtp_security','STARTTLS')).strip(),
+        'smtp_user':str(form.get('smtp_user','')).strip(),
+        'smtp_from':str(form.get('smtp_from','')).strip(),
+        'notification_recipients':str(form.get('notification_recipients','')).strip(),
+    }
     pwd=str(form.get('smtp_password',''))
-    if pwd: vals['smtp_secret']=encrypt_secret(pwd)
+    if pwd:
+        vals['smtp_secret']=encrypt_secret(pwd)
     store.set_settings(vals)
+
 
 @app.post('/settings/notifications')
 async def settings_notifications(req:Request):
-    if not _authed(req): return _redirect_login()
-    f=await req.form(); await _save_notification_form(f); return RedirectResponse('/settings',303)
+    if not _authed(req):
+        return _redirect_login()
+    f=await req.form()
+    await _save_notification_form(f)
+    return RedirectResponse('/settings',303)
+
 
 @app.post('/settings/notifications/test',response_class=HTMLResponse)
 async def settings_notifications_test(req:Request):
-    if not _authed(req): return _redirect_login()
-    f=await req.form(); await _save_notification_form(f)
-    try: result=send_email(store,'Prueba Atas',f'Notificación de prueba enviada correctamente desde {_org()}.')
-    except Exception as exc: return HTMLResponse(_ui('Notificaciones',f"<div class='card error-panel'><h2>No se pudo enviar</h2><p>{esc(exc)}</p><a class='btn' href='/settings'>Volver</a></div>"),400)
-    return HTMLResponse(_ui('Notificaciones',f"<div class='card success-panel'><h2>Correo enviado</h2><p>Destinatarios: {result.get('recipients',0)}</p><a class='btn primary' href='/settings'>Volver</a></div>"))
+    if not _authed(req):
+        return _redirect_login()
+    f=await req.form()
+    await _save_notification_form(f)
+    try:
+        result=send_email(store,'Prueba Atas',f'Notificación de prueba enviada correctamente desde {_org()}.')
+        if not result.get('sent'):
+            raise ValueError('Active las notificaciones y complete la configuración SMTP antes de probar.')
+    except Exception as exc:
+        return HTMLResponse(
+            _ui('Notificaciones',f"<div class='card error-panel'><h2>No se pudo enviar</h2><p>{esc(exc)}</p><a class='btn' href='/settings'>Volver</a></div>"),
+            400,
+        )
+    return HTMLResponse(
+        _ui('Notificaciones',f"<div class='card success-panel'><h2>Correo enviado</h2><p>Destinatarios: {result.get('recipients',0)}</p><a class='btn primary' href='/settings'>Volver</a></div>")
+    )
+
 
 @app.post('/settings/admin')
 async def settings_admin(req:Request):
-    if not _authed(req): return _redirect_login()
-    f=await req.form(); current=str(f.get('current_password','')); new_user=str(f.get('new_user','')).strip(); new_pwd=str(f.get('new_password',''))
-    if not verify_password(current,settings.web_admin_password_hash): return HTMLResponse(_ui('Configuración',"<div class='card error-panel'><h2>Contraseña actual incorrecta</h2><a class='btn' href='/settings'>Volver</a></div>"),400)
-    if not new_user or len(new_pwd)<6: return HTMLResponse('Datos inválidos',400)
-    h=password_hash(new_pwd); _set_env_value('WEB_ADMIN_USER',new_user); _set_env_value('WEB_ADMIN_PASSWORD_HASH',h); settings.web_admin_user=new_user; settings.web_admin_password_hash=h
-    r=RedirectResponse('/login',303); r.delete_cookie(COOKIE); return r
+    if not _authed(req):
+        return _redirect_login()
+    f=await req.form()
+    current=str(f.get('current_password',''))
+    new_user=str(f.get('new_user','')).strip()
+    new_pwd=str(f.get('new_password',''))
+    if not verify_password(current,settings.web_admin_password_hash):
+        return HTMLResponse(
+            _ui('Configuración',"<div class='card error-panel'><h2>Contraseña actual incorrecta</h2><a class='btn' href='/settings'>Volver</a></div>"),
+            400,
+        )
+    if not new_user or len(new_pwd)<6:
+        return HTMLResponse('Datos inválidos',400)
+    h=password_hash(new_pwd)
+    _set_env_value('WEB_ADMIN_USER',new_user)
+    _set_env_value('WEB_ADMIN_PASSWORD_HASH',h)
+    settings.web_admin_user=new_user
+    settings.web_admin_password_hash=h
+    r=RedirectResponse('/login',303)
+    r.delete_cookie(COOKIE)
+    return r
+
 
 @app.get('/logs',response_class=HTMLResponse)
 def logs(req:Request):
-    if not _authed(req): return _redirect_login()
-    p=settings.log_path/'sap_fx_service.log'; text='Sin log todavía.'
-    if p.exists(): text=''.join(p.read_text(encoding='utf-8',errors='replace').splitlines(True)[-600:])
-    return HTMLResponse(_ui('Logs',page_header('Logs técnicos','Últimas 600 líneas.')+f"<div class='card'><pre>{esc(text)}</pre></div>"))
+    if not _authed(req):
+        return _redirect_login()
+    p=settings.log_path/'sap_fx_service.log'
+    text='Sin log todavía.'
+    if p.exists():
+        text=''.join(p.read_text(encoding='utf-8',errors='replace').splitlines(True)[-600:])
+    return HTMLResponse(
+        _ui('Logs',page_header('Logs técnicos','Últimas 600 líneas.')+f"<div class='card'><pre>{esc(text)}</pre></div>")
+    )
+
 
 @app.get('/health')
-def health(): return {'status':'ok','service':'Atas','version':get_version(),'setup_complete':_setup_complete(),'enabled_companies':len(store.list_companies(True)),'local_only':True}
+def health():
+    return {
+        'status':'ok',
+        'service':'Atas',
+        'version':get_version(),
+        'setup_complete':_setup_complete(),
+        'enabled_companies':len(store.list_companies(True)),
+        'local_only':True,
+    }
