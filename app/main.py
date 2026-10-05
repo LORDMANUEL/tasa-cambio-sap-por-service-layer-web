@@ -103,7 +103,7 @@ def _setup_page(error:str='')->str:
     body=f"""
 <div class='setup-shell'>
   <aside class='setup-side'>
-    <div class='setup-product'><div class='brand-mark xl'>FX</div><div><strong>SAP FX</strong><span>Control Center V5</span></div></div>
+    <div class='setup-product'><div class='brand-mark xl'>AT</div><div><strong>SAP FX</strong><span>Control Center V5</span></div></div>
     <div class='setup-hero-art'><div class='server-stack'><i></i><i></i><i></i><b>SAP</b></div></div>
     <h1>Bienvenido a Atas</h1>
     <p>Configura una vez y deja lista la plataforma para consultar bancos, comparar SAP, automatizar tasas y conservar auditoría.</p>
