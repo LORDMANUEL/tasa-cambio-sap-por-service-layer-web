@@ -20,6 +20,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: atas-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows-exe:
     runs-on: windows-latest
