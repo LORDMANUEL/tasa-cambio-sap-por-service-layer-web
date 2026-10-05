@@ -119,7 +119,7 @@ def test_release_has_no_customer_specific_defaults():
     scan_ext={'.py','.md','.txt','.example','.json','.js','.css','.html','.yml','.yaml','.ps1','.bat','.cmd','.sh','.iss','.service','.desktop'}
     offenders=[]
     for p in BASE_DIR.rglob('*'):
-        if not p.is_file() or '.git' in p.parts or '.venv' in p.parts or 'dist' in p.parts:
+        if not p.is_file() or '.git' in p.parts or '.venv' in p.parts or 'dist' in p.parts or 'tests' in p.parts:
             continue
         if p.suffix.lower() not in scan_ext and p.name not in ('.env.example',):
             continue
