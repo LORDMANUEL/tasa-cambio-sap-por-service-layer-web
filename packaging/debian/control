@@ -1,11 +1,12 @@
-Package: sap-fx-control-center
+Package: atas
 Version: 5.0.0
 Section: office
 Priority: optional
 Architecture: amd64
-Maintainer: SAP FX Control Center Community
+Maintainer: LORDMANUEL <https://github.com/LORDMANUEL>
+Homepage: https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web
 Depends: python3 (>= 3.11), python3-venv, python3-pip, ca-certificates, xdg-utils
-Description: Local SAP Business One exchange-rate control center
- Multi-company local web application for bank/API market sources, consensus
- validation, scheduled exchange-rate updates through SAP Business One Service
- Layer, audit history, reports, notifications and guided setup.
+Description: Atas - SAP Business One exchange-rate automation
+ Local-first multi-company web application for bank/API market sources,
+ consensus validation, scheduled exchange-rate updates through SAP Business One
+ Service Layer, audit history, reports, notifications and guided setup.
