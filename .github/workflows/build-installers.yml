@@ -123,7 +123,7 @@ jobs:
               if (Test-Path $stderr) { Get-Content $stderr }
               throw "Atas portable ZIP did not pass /health smoke test"
             }
-            Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',('"'+(Join-Path $target 'ATAS.bat')+'"') -WorkingDirectory $target -Wait
+            Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',('"' + (Join-Path $target 'ATAS.bat') + '" -NoBrowser') -WorkingDirectory $target -Wait
             Start-Sleep -Seconds 1
             $h2 = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/health' -TimeoutSec 2
             if ($h2.status -ne 'ok') { throw "Portable ATAS.bat launcher failed" }

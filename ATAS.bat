@@ -15,7 +15,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\bootstrap.ps1"
 if errorlevel 1 goto fail
 
 :launch
-powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\windows\start-atas.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\windows\start-atas.ps1" %*
 if errorlevel 1 goto fail
 exit /b 0
 
