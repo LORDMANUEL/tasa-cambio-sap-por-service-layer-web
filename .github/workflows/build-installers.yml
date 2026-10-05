@@ -27,6 +27,13 @@ jobs:
       PYTHON_EMBED_VERSION: '3.13.14'
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Get-Content VERSION.txt -Raw).Trim()
+          if (-not $v) { throw "VERSION.txt is empty" }
+          "version=$v" >> $env:GITHUB_OUTPUT
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -59,7 +66,8 @@ jobs:
         shell: pwsh
         run: |
           $portableDir = Join-Path $pwd 'dist/windows-package'
-          $portableZip = Join-Path $pwd 'dist/Atas-V5-Portable-x64.zip'
+          $version = '${{ steps.version.outputs.version }}'
+          $portableZip = Join-Path $pwd "dist/Atas-V$version-Portable-x64.zip"
           if (Test-Path $portableZip) { Remove-Item $portableZip -Force }
           Compress-Archive -Path "$portableDir\*" -DestinationPath $portableZip -CompressionLevel Optimal
           $zip = Get-Item $portableZip
@@ -67,7 +75,7 @@ jobs:
           $mib = [math]::Round($zip.Length / 1MB, 2)
           @(
             "product=Atas"
-            "version=5.0.0"
+            "version=$version"
             "platform=windows-portable-x64"
             "file=$($zip.Name)"
             "bytes=$($zip.Length)"
@@ -84,7 +92,8 @@ jobs:
       - name: Smoke test portable ZIP
         shell: pwsh
         run: |
-          $portableZip = Join-Path $pwd 'dist/Atas-V5-Portable-x64.zip'
+          $version = '${{ steps.version.outputs.version }}'
+          $portableZip = Join-Path $pwd "dist/Atas-V$version-Portable-x64.zip"
           $target = Join-Path $env:RUNNER_TEMP 'AtasPortableSmoke'
           if (Test-Path $target) { Remove-Item $target -Recurse -Force }
           Expand-Archive $portableZip -DestinationPath $target -Force
@@ -115,7 +124,7 @@ jobs:
         with:
           name: Atas-Windows-Portable-x64
           path: |
-            dist/Atas-V5-Portable-x64.zip
+            dist/Atas-V${{ steps.version.outputs.version }}-Portable-x64.zip
             dist/BUILD_INFO_PORTABLE.txt
           if-no-files-found: error
       - name: Install Inno Setup
@@ -125,7 +134,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist/installer | Out-Null
-          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer/windows/Atas.iss "/DSourceDir=$pwd\dist\windows-package" "/DOutputDir=$pwd\dist\installer"
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer/windows/Atas.iss "/DSourceDir=$pwd\dist\windows-package" "/DOutputDir=$pwd\dist\installer" "/DAppVersion=${{ steps.version.outputs.version }}"
       - name: Smoke test installed Windows EXE
         shell: pwsh
         run: |
@@ -170,7 +179,7 @@ jobs:
           Write-Host "ATAS_WINDOWS_EXE_SHA256=$hash"
           @(
             "product=Atas"
-            "version=5.0.0"
+            "version=${{ steps.version.outputs.version }}"
             "platform=windows-x64"
             "file=$($exe.Name)"
             "bytes=$($exe.Length)"
@@ -194,6 +203,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve Debian version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(tr -d '\r\n ' < VERSION.txt)"
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -209,10 +225,10 @@ jobs:
       - name: Install packaging tools
         run: sudo apt-get update && sudo apt-get install -y rsync dpkg-dev
       - name: Build DEB
-        run: VERSION=5.0.0 ./scripts/build_deb.sh
+        run: VERSION="${{ steps.version.outputs.version }}" ./scripts/build_deb.sh
       - name: Install and smoke test Debian package
         run: |
-          DEB=$(ls dist/atas_*.deb | head -1)
+          DEB="dist/atas_${{ steps.version.outputs.version }}_amd64.deb"
           sudo apt-get install -y "./$DEB"
           test -x /opt/atas/.venv/bin/python
           test -f /opt/atas/app/main.py
@@ -251,7 +267,7 @@ jobs:
           echo "ATAS_DEB_SHA256=$SHA"
           {
             echo "product=Atas"
-            echo "version=5.0.0"
+            echo "version=${{ steps.version.outputs.version }}"
             echo "platform=debian-amd64"
             echo "file=$(basename "$DEB")"
             echo "bytes=$BYTES"
