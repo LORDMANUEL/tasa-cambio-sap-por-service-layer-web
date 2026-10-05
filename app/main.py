@@ -1,4 +1,4 @@
-"""SAP FX Control Center V5 - generic, local-first accounting platform.
+"""Atas V5 - generic, local-first accounting platform.
 
 V5 keeps the proven SAP/bank engine from the V4 line and replaces the
 company-specific presentation/configuration with a reusable first-run wizard,
@@ -86,7 +86,7 @@ async def lifespan(app):
     _stop.set()
     if _thread and _thread.is_alive(): _thread.join(timeout=2)
 
-app=FastAPI(title='SAP FX Control Center V5',version='5.0.0',lifespan=lifespan,docs_url=None)
+app=FastAPI(title='Atas V5',version='5.0.0',lifespan=lifespan,docs_url=None)
 app.mount('/static',StaticFiles(directory=str(ROOT/'app'/'static')),name='static')
 
 @app.middleware('http')
@@ -105,7 +105,7 @@ def _setup_page(error:str='')->str:
   <aside class='setup-side'>
     <div class='setup-product'><div class='brand-mark xl'>FX</div><div><strong>SAP FX</strong><span>Control Center V5</span></div></div>
     <div class='setup-hero-art'><div class='server-stack'><i></i><i></i><i></i><b>SAP</b></div></div>
-    <h1>Bienvenido a SAP FX Control Center</h1>
+    <h1>Bienvenido a Atas</h1>
     <p>Configura una vez y deja lista la plataforma para consultar bancos, comparar SAP, automatizar tasas y conservar auditoría.</p>
     <div class='setup-side-status'><span class='status-dot'></span><b>Instalación local</b><small>Los datos y credenciales permanecen en esta PC.</small></div>
   </aside>
@@ -148,7 +148,7 @@ def _setup_page(error:str='')->str:
         <label class='switchline danger'><input type='checkbox' name='enable_prod_writes'><span>Permitir escritura automática en bases marcadas PROD</span></label>
         <div class='flow-preview'><div><i>⌂</i><b>3+ fuentes</b><span>Trayendo tasas</span></div><em>→</em><div><i>✓</i><b>Consenso</b><span>Mediana y outliers</span></div><em>→</em><div><i>☁</i><b>SAP</b><span>Leyendo tasa actual</span></div><em>→</em><div><i>≠</i><b>Comparación</b><span>Fuente oficial vs consenso</span></div><em>→</em><div><i>✎</i><b>Escritura</b><span>Solo si es segura</span></div><em>→</em><div><i>✓</i><b>Listo</b><span>Verificado y auditado</span></div></div>
       </section>
-      <section class='setup-card finish-card'><div class='step-no'>8</div><div class='setup-card-title'><h3>Finalizar configuración</h3><p>Al guardar entrarás al dashboard y comenzará el recorrido guiado.</p></div><button class='btn primary xl' type='submit'>Guardar y entrar a SAP FX Control Center →</button></section>
+      <section class='setup-card finish-card'><div class='step-no'>8</div><div class='setup-card-title'><h3>Finalizar configuración</h3><p>Al guardar entrarás al dashboard y comenzará el recorrido guiado.</p></div><button class='btn primary xl' type='submit'>Guardar y entrar a Atas →</button></section>
     </form>
   </main>
 </div>"""
@@ -235,7 +235,7 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
 def login_page():
     if not _setup_complete(): return RedirectResponse('/setup',303)
     org=_org(); logo=_logo_url(); brand=f"<img class='login-org-logo' src='{esc(logo)}'>" if logo else "<div class='brand-mark xl'>FX</div>"
-    return HTMLResponse(f"""<!doctype html><html lang='es' data-theme='dark'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>SAP FX Control Center · Acceso</title><link rel='stylesheet' href='/static/styles.css'><script src='/static/app.js' defer></script></head><body><div class='login-v5'><section class='login-visual'>{brand}<div><div class='eyebrow'>SAP BUSINESS ONE · DAILY FX</div><h1>Control de tasas simple, visual y trazable.</h1><p>{esc(org)}</p></div><div class='login-flow'><span>Banco</span><i>→</i><span>Validación</span><i>→</i><span>SAP</span><i>→</i><span>Auditoría</span></div></section><section class='login-form-wrap'><form method='post' class='login-card v5'><div class='eyebrow'>ACCESO LOCAL</div><h2>Bienvenido</h2><p class='muted'>Ingresa para administrar tasas y automatizaciones.</p><label>Usuario</label><input name='user' autocomplete='username' required><label>Contraseña</label><input type='password' name='password' autocomplete='current-password' required><button class='btn primary xl'>Ingresar →</button><small>Panel local · secretos cifrados por el sistema operativo</small></form></section></div></body></html>""")
+    return HTMLResponse(f"""<!doctype html><html lang='es' data-theme='dark'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Atas · Acceso</title><link rel='stylesheet' href='/static/styles.css'><script src='/static/app.js' defer></script></head><body><div class='login-v5'><section class='login-visual'>{brand}<div><div class='eyebrow'>SAP BUSINESS ONE · DAILY FX</div><h1>Control de tasas simple, visual y trazable.</h1><p>{esc(org)}</p></div><div class='login-flow'><span>Banco</span><i>→</i><span>Validación</span><i>→</i><span>SAP</span><i>→</i><span>Auditoría</span></div></section><section class='login-form-wrap'><form method='post' class='login-card v5'><div class='eyebrow'>ACCESO LOCAL</div><h2>Bienvenido</h2><p class='muted'>Ingresa para administrar tasas y automatizaciones.</p><label>Usuario</label><input name='user' autocomplete='username' required><label>Contraseña</label><input type='password' name='password' autocomplete='current-password' required><button class='btn primary xl'>Ingresar →</button><small>Panel local · secretos cifrados por el sistema operativo</small></form></section></div></body></html>""")
 
 @app.post('/login')
 async def login(req:Request):
@@ -494,7 +494,7 @@ async def settings_notifications(req:Request):
 async def settings_notifications_test(req:Request):
     if not _authed(req): return _redirect_login()
     f=await req.form(); await _save_notification_form(f)
-    try: result=send_email(store,'Prueba SAP FX Control Center',f'Notificación de prueba enviada correctamente desde {_org()}.')
+    try: result=send_email(store,'Prueba Atas',f'Notificación de prueba enviada correctamente desde {_org()}.')
     except Exception as exc: return HTMLResponse(_ui('Notificaciones',f"<div class='card error-panel'><h2>No se pudo enviar</h2><p>{esc(exc)}</p><a class='btn' href='/settings'>Volver</a></div>"),400)
     return HTMLResponse(_ui('Notificaciones',f"<div class='card success-panel'><h2>Correo enviado</h2><p>Destinatarios: {result.get('recipients',0)}</p><a class='btn primary' href='/settings'>Volver</a></div>"))
 
@@ -515,4 +515,4 @@ def logs(req:Request):
     return HTMLResponse(_ui('Logs',page_header('Logs técnicos','Últimas 600 líneas.')+f"<div class='card'><pre>{esc(text)}</pre></div>"))
 
 @app.get('/health')
-def health(): return {'status':'ok','service':'SAP FX Control Center','version':'5.0.0','setup_complete':_setup_complete(),'enabled_companies':len(store.list_companies(True)),'local_only':True}
+def health(): return {'status':'ok','service':'Atas','version':'5.0.0','setup_complete':_setup_complete(),'enabled_companies':len(store.list_companies(True)),'local_only':True}
