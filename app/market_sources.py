@@ -320,7 +320,25 @@ def scan_source(source: dict, settings: Settings) -> dict[str, Any]:
     return snap.serializable()
 
 
+def _validate_snapshot_pairs(snapshot: SourceSnapshot, max_pair_spread_percent: Decimal) -> None:
+    """Reject structurally implausible buy/sell pairs before consensus."""
+    for cur, pair in snapshot.rates.items():
+        buy = Decimal(str(pair.get("buy")))
+        sell = Decimal(str(pair.get("sell")))
+        if buy <= 0 or sell <= 0:
+            raise MarketSourceError(f"{snapshot.code} {cur}: compra/venta debe ser mayor que cero.")
+        if sell < buy:
+            raise MarketSourceError(f"{snapshot.code} {cur}: venta {sell} es menor que compra {buy}.")
+        spread = (sell - buy) / buy * Decimal("100")
+        if spread > max_pair_spread_percent:
+            raise MarketSourceError(
+                f"{snapshot.code} {cur}: spread compra/venta {spread:.3f}% excede {max_pair_spread_percent}%."
+            )
+
+
 def build_consensus(store, settings: Settings, company: dict, currencies: list[str]) -> MarketConsensus:
+    runtime_settings = store.get_settings()
+    max_pair_spread = Decimal(str(runtime_settings.get("max_pair_spread_percent", "35.0")))
     configured = [x.strip().upper() for x in str(company.get("bank_source_codes") or "").split(",") if x.strip()]
     primary = str(company.get("primary_bank") or "").upper().strip()
     if primary and primary not in configured:
@@ -339,6 +357,7 @@ def build_consensus(store, settings: Settings, company: dict, currencies: list[s
             continue
         try:
             snap = fetch_source(src, settings)
+            _validate_snapshot_pairs(snap, max_pair_spread)
             snapshots.append(snap)
             store.mark_bank_source_result(src["id"], True, "OK")
         except Exception as exc:
@@ -349,8 +368,8 @@ def build_consensus(store, settings: Settings, company: dict, currencies: list[s
     official_rates: dict[str, Decimal] = {}
     medians: dict[str, Decimal] = {}
     deviations: dict[str, Decimal] = {}
-    max_dev = Decimal(str(store.get_settings().get("max_source_deviation_percent", settings.max_bank_spread_percent)))
-    min_sources = max(3, int(store.get_settings().get("min_market_sources", "3") or 3))
+    max_dev = Decimal(str(runtime_settings.get("max_source_deviation_percent", settings.max_bank_spread_percent)))
+    min_sources = max(3, int(runtime_settings.get("min_market_sources", "3") or 3))
     by_code = {s.code.upper(): s for s in snapshots}
     if primary not in by_code:
         warnings.append(f"La fuente oficial {primary or '(sin definir)'} no respondió correctamente.")

@@ -87,3 +87,41 @@ def test_bank_source_web_crud_and_preview(monkeypatch):
         monkeypatch.setattr(m,'scan_source',lambda src,settings:{'name':'Banco X','source_url':'https://bank.test/fx','rates':{'USD':{'buy':'500','sell':'510'}}})
         p=client.post('/banks/preview',headers=headers,data={'code':'BANKX','name':'Banco X','country':'CR','source_type':'WEB_HTML','url':'https://bank.test/fx','config_json':'{"mode":"AUTO","currencies":["USD"]}','headers_json':'{}','timeout_seconds':'10','tls_verify':'on'})
         assert p.status_code==200 and '510' in p.text and 'Extracción correcta' in p.text
+
+
+def test_consensus_rejects_sell_below_buy(monkeypatch):
+    import app.market_sources as ms
+    from app.market_sources import SourceSnapshot
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'x.db')
+        for code in ('A','B','C'):
+            st.upsert_bank_source(source_id=None,code=code,name=code,country='X',source_type='WEB_HTML',url='https://example.com',enabled=True,config_json='{}')
+        def fake(src,settings):
+            if src['code']=='B':
+                pair={'buy':Decimal('28.00'),'sell':Decimal('27.00')}
+            else:
+                pair={'buy':Decimal('26.90'),'sell':Decimal('27.02')}
+            return SourceSnapshot(src['code'],src['name'],src['source_type'],src['url'],'2026-10-05T06:00:00-06:00',{'USD':pair},'x')
+        monkeypatch.setattr(ms,'fetch_source',fake)
+        c=ms.build_consensus(st,Settings(),{'primary_bank':'A','bank_source_codes':'A,B,C'},['USD'])
+        assert not c.safe
+        assert 'B' in c.failed_sources
+        assert 'menor que compra' in c.failed_sources['B']
+
+
+def test_consensus_rejects_implausible_pair_spread(monkeypatch):
+    import app.market_sources as ms
+    from app.market_sources import SourceSnapshot
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'x.db')
+        st.set_settings({'max_pair_spread_percent':'10'})
+        for code in ('A','B','C'):
+            st.upsert_bank_source(source_id=None,code=code,name=code,country='X',source_type='WEB_HTML',url='https://example.com',enabled=True,config_json='{}')
+        def fake(src,settings):
+            pair={'buy':Decimal('20.00'),'sell':Decimal('30.00')} if src['code']=='C' else {'buy':Decimal('26.90'),'sell':Decimal('27.02')}
+            return SourceSnapshot(src['code'],src['name'],src['source_type'],src['url'],'2026-10-05T06:00:00-06:00',{'USD':pair},'x')
+        monkeypatch.setattr(ms,'fetch_source',fake)
+        c=ms.build_consensus(st,Settings(),{'primary_bank':'A','bank_source_codes':'A,B,C'},['USD'])
+        assert not c.safe
+        assert 'C' in c.failed_sources
+        assert 'spread compra/venta' in c.failed_sources['C']

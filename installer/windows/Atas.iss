@@ -37,5 +37,8 @@ Name: "{autodesktop}\Atas"; Filename: "{app}\scripts\windows\start-atas.cmd"; Wo
 Name: "{group}\GitHub de LORDMANUEL"; Filename: "https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web"
 [Tasks]
 Name: "desktopicon"; Description: "Crear acceso directo en el escritorio"; GroupDescription: "Accesos directos:"; Flags: unchecked
+Name: "autostart"; Description: "Iniciar Atas automáticamente al iniciar sesión"; GroupDescription: "Automatización local:"; Flags: checkedonce
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Atas"; ValueData: """{app}\scripts\windows\start-atas-background.cmd"""; Flags: uninsdeletevalue; Tasks: autostart
 [Run]
 Filename: "{app}\scripts\windows\start-atas.cmd"; Description: "Abrir Atas"; Flags: postinstall nowait skipifsilent

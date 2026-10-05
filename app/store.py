@@ -176,6 +176,7 @@ class Store:
                 "notify_errors": "true",
                 "min_market_sources": "3",
                 "max_source_deviation_percent": "2.0",
+                "max_pair_spread_percent": "35.0",
             }
             for k, v in defaults.items():
                 con.execute("INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES(?,?,?)", (k, v, self.now()))
