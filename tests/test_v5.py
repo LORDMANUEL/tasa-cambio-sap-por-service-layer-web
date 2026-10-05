@@ -537,3 +537,26 @@ def test_notification_rejects_invalid_smtp_mode():
             assert False
         except NotificationError as exc:
             assert 'Modo SMTP inválido' in str(exc)
+
+
+def test_manual_reconcile_does_not_require_auto_enabled():
+    import app.sync_engine as se
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'manual.db')
+        cid=add_company(st,auto_enabled=False,allow_write=True,scheduled_write=False)
+        row=st.get_company(cid)
+        assert se._manual_reconcile_write_allowed(st,row) is True
+        assert se._scheduled_write_allowed(st,row) is False
+
+
+def test_manual_prod_reconcile_requires_global_and_company_write_gate():
+    import app.sync_engine as se
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'manual.db')
+        cid=add_company(st,database_name='PRODDB',environment='PROD',auto_enabled=False,scheduled_write=True,allow_write=False)
+        row=st.get_company(cid)
+        assert se._manual_reconcile_write_allowed(st,row) is False
+        st.set_settings({'prod_automation_enabled':'true'})
+        row=st.get_company(cid)
+        assert se._manual_reconcile_write_allowed(st,row) is True
+        assert se._scheduled_write_allowed(st,row) is False

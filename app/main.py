@@ -397,15 +397,14 @@ async def prod_toggle(req:Request):
 @app.post('/automation/run/{company_id}')
 def run_one(company_id:int,req:Request):
     if not _authed(req): return _redirect_login()
-    result=reconcile_company(settings,store,company_id,scheduled=True); c=store.get_company(company_id); status,msg=_run_status(result); store.mark_run_result(company_id,datetime.now(ZoneInfo(settings.timezone)).date().isoformat(),status,msg); send_run_summary(store,[result]); return RedirectResponse('/automation',303)
+    result=reconcile_company(settings,store,company_id,scheduled=False); c=store.get_company(company_id); status,msg=_run_status(result); store.mark_run_result(company_id,datetime.now(ZoneInfo(settings.timezone)).date().isoformat(),status,msg); send_run_summary(store,[result]); return RedirectResponse('/automation',303)
 
 @app.post('/automation/run-all')
 def run_all(req:Request):
     if not _authed(req): return _redirect_login()
     results=[]; today=datetime.now(ZoneInfo(settings.timezone)).date().isoformat()
     for c in store.list_companies(True):
-        if not c.get('auto_enabled'): continue
-        r=reconcile_company(settings,store,c['id'],scheduled=True); results.append(r); status,msg=_run_status(r); store.mark_run_result(c['id'],today,status,msg)
+        r=reconcile_company(settings,store,c['id'],scheduled=False); results.append(r); status,msg=_run_status(r); store.mark_run_result(c['id'],today,status,msg)
     send_run_summary(store,results); return RedirectResponse('/',303)
 
 @app.get('/banks',response_class=HTMLResponse)

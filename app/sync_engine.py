@@ -210,10 +210,22 @@ def write_suggested_manual(settings:Settings, store:Store, company_id:int, curre
     return {'currency':cur,'before':str(before),'bank':str(bank),'after':str(after),'status':status,'environment':row['environment']}
 
 def _scheduled_write_allowed(store:Store,row:dict) -> bool:
-    if not row.get('scheduled_write') or not row.get('auto_enabled'): return False
-    if row['environment']=='TEST': return True
-    global_ok=store.get_settings().get('prod_automation_enabled','false').lower()=='true'
-    return global_ok
+    """Automatic scheduler gate: requires automation + explicit write authorization."""
+    if not row.get('auto_enabled') or not row.get('scheduled_write'):
+        return False
+    if row['environment']=='TEST':
+        return True
+    return store.get_settings().get('prod_automation_enabled','false').lower()=='true'
+
+
+def _manual_reconcile_write_allowed(store:Store,row:dict) -> bool:
+    """Manual 'run now' gate; independent from whether a daily schedule is enabled."""
+    if row['environment']=='TEST':
+        return bool(row.get('allow_write') or row.get('scheduled_write'))
+    return (
+        bool(row.get('scheduled_write'))
+        and store.get_settings().get('prod_automation_enabled','false').lower()=='true'
+    )
 
 
 def reconcile_company(settings:Settings, store:Store, company_id:int, *, scheduled:bool=True) -> dict:
@@ -234,7 +246,8 @@ def reconcile_company(settings:Settings, store:Store, company_id:int, *, schedul
         record_system_error(store,row,error,'credentials')
         return {**result,'error':error,'error_recorded':True}
     today=datetime.now(ZoneInfo(settings.timezone)).date(); sap_url=_sap_url(settings,store,row)
-    official=_official_rates(comparison); allowed=_scheduled_write_allowed(store,row) if scheduled else (row['environment']=='TEST' and bool(row.get('allow_write')))
+    official=_official_rates(comparison)
+    allowed=_scheduled_write_allowed(store,row) if scheduled else _manual_reconcile_write_allowed(store,row)
     company=SapCompany(row['database_name'],row['environment'],allowed)
     try:
         with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=settings.sap_verify_tls,timeout=settings.sap_timeout_seconds) as sap:
