@@ -27,3 +27,23 @@ jobs:
           publish_dir: ./site
           publish_branch: gh-pages
           force_orphan: true
+
+      - name: Verify public Atas Pages
+        shell: bash
+        run: |
+          URL="https://lordmanuel.github.io/tasa-cambio-sap-por-service-layer-web/"
+          OK=0
+          for i in $(seq 1 30); do
+            BODY=$(curl -fsSL "$URL" 2>/dev/null || true)
+            if printf '%s' "$BODY" | grep -q "Atas V5" && printf '%s' "$BODY" | grep -q "Luis Manuel Fajardo Rivera"; then
+              OK=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$OK" -ne 1 ]; then
+            echo "Public Pages verification failed: $URL"
+            exit 1
+          fi
+          echo "ATAS_PAGES_SMOKE=OK"
+          echo "ATAS_PAGES_URL=$URL"
