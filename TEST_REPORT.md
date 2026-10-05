@@ -4,7 +4,7 @@ Validación ejecutada sobre el paquete final.
 
 ## Suite automática
 
-- `pytest`: **26 passed**
+- `pytest`: **28 passed**
 - `compileall app`: OK
 - `node --check app/static/app.js`: OK
 
@@ -40,7 +40,9 @@ Validación ejecutada sobre el paquete final.
 - claim diario atómico por CompanyDB;
 - bloqueo de segunda ejecución automática el mismo día;
 - persistencia del claim ante error inesperado;
-- deduplicación de errores ya registrados por el reconciliador.
+- deduplicación de errores ya registrados por el reconciliador;
+- `VERSION.txt` como única fuente de versión para app, EXE, Portable, DEB y `/health`;
+- bloqueo de versiones hardcodeadas en packaging.
 
 ## Limitación intencional
 
