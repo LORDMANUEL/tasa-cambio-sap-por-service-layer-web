@@ -1,6 +1,6 @@
 # Atas V5
 
-**Autor:** [LORDMANUEL](https://github.com/LORDMANUEL) · **Repositorio:** [tasa-cambio-sap-por-service-layer-web](https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web)
+**Autor:** **Luis Manuel Fajardo Rivera** · [LORDMANUEL](https://github.com/LORDMANUEL) · **Repositorio:** [tasa-cambio-sap-por-service-layer-web](https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web)
 
 
 Plataforma web **local-first, multiempresa y multipaís** para controlar la tasa de cambio diaria de SAP Business One mediante Service Layer.
