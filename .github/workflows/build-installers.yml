@@ -35,7 +35,7 @@ jobs:
           New-Item -ItemType Directory -Force dist/windows-package/runtime/python/Lib/site-packages | Out-Null
           python -m pip install --disable-pip-version-check -r requirements.txt --target dist/windows-package/runtime/python/Lib/site-packages
           $pth = Get-ChildItem dist/windows-package/runtime/python -Filter 'python*._pth' | Select-Object -First 1
-          @('python313.zip','.','Lib','Lib\site-packages','import site') | Set-Content -Encoding ASCII $pth.FullName
+          @('python313.zip','.','Lib','Lib\site-packages','..\..','import site') | Set-Content -Encoding ASCII $pth.FullName
       - name: Copy application payload
         shell: pwsh
         run: |
@@ -60,7 +60,9 @@ jobs:
           if ($install.ExitCode -ne 0) { throw "Atas installer returned $($install.ExitCode)" }
           if (-not (Test-Path "$target\runtime\python\python.exe")) { throw "Embedded Python missing after install" }
           if (-not (Test-Path "$target\app\main.py")) { throw "Atas application missing after install" }
-          $proc = Start-Process -FilePath "$target\runtime\python\python.exe" -ArgumentList '-m','app.run_server' -WorkingDirectory $target -PassThru
+          $stdout = Join-Path $env:RUNNER_TEMP 'atas-server-out.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'atas-server-err.log'
+          $proc = Start-Process -FilePath "$target\runtime\python\python.exe" -ArgumentList '-m','app.run_server' -WorkingDirectory $target -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
           try {
             $ok = $false
             for ($i=0; $i -lt 30; $i++) {
@@ -70,7 +72,11 @@ jobs:
                 if ($h.status -eq 'ok' -and $h.service -eq 'Atas') { $ok = $true; break }
               } catch {}
             }
-            if (-not $ok) { throw "Installed Atas did not pass /health smoke test" }
+            if (-not $ok) {
+            if (Test-Path $stdout) { Get-Content $stdout }
+            if (Test-Path $stderr) { Get-Content $stderr }
+            throw "Installed Atas did not pass /health smoke test"
+          }
             Write-Host "ATAS_WINDOWS_SMOKE=OK"
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
