@@ -4,7 +4,7 @@ Validación ejecutada sobre el paquete final.
 
 ## Suite automática
 
-- `pytest`: **22 passed**
+- `pytest`: **26 passed**
 - `compileall app`: OK
 - `node --check app/static/app.js`: OK
 
@@ -36,7 +36,11 @@ Validación ejecutada sobre el paquete final.
 - bloqueo por outlier de fuente oficial;
 - CRUD web de fuente;
 - preview/escaneo web de fuente;
-- headers secretos preparados para cifrado DPAPI.
+- headers secretos preparados para cifrado DPAPI;
+- claim diario atómico por CompanyDB;
+- bloqueo de segunda ejecución automática el mismo día;
+- persistencia del claim ante error inesperado;
+- deduplicación de errores ya registrados por el reconciliador.
 
 ## Limitación intencional
 
