@@ -453,3 +453,37 @@ def test_company_rejects_invalid_currency_code():
             assert False
         except ValueError as exc:
             assert 'códigos de 3 letras' in str(exc)
+
+
+def test_inspect_company_reads_sap_even_when_bank_consensus_is_unsafe(monkeypatch):
+    import app.sync_engine as se
+    from app.config import Settings
+    from types import SimpleNamespace
+
+    class FakeSap:
+        def __init__(self,*args,**kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self,*args): return False
+        def get_local_currency(self): return 'HNL'
+        def get_currency_rate(self,cur,day): return Decimal('27.0000') if cur=='USD' else Decimal('33.0000')
+
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'inspect.db')
+        cid=add_company(st,bank_source_codes='A,B,C',primary_bank='A',secondary_bank='B')
+        monkeypatch.setattr(se,'_password',lambda row:'pw')
+        monkeypatch.setattr(se,'SapFxClient',FakeSap)
+        monkeypatch.setattr(se,'_comparison',lambda settings,store,row:SimpleNamespace(
+            safe=False,
+            warnings=['simulated bank failure'],
+            successful_sources=['A','B'],
+            failed_sources={'C':'offline'},
+            official_rates={},
+        ))
+        result=se.inspect_company(Settings(),st,cid)
+        assert result.get('error') is None
+        assert result['bank_error']=='BANK_VALIDATION_FAILED'
+        assert result['rates']['USD']['sap']=='27.0000'
+        assert result['rates']['USD']['bank'] is None
+        assert result['rates']['USD']['can_test_write'] is False
+        tx=st.list_transactions(10)
+        assert any(x['status']=='READ_ONLY_BANK_BLOCKED' for x in tx)
