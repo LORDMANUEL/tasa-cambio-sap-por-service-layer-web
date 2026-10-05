@@ -340,3 +340,90 @@ def test_sap_set_rate_rejects_invalid_currency_code():
         assert False
     except Exception as exc:
         assert 'Código de moneda inválido' in str(exc)
+
+
+def test_main_settings_routes_are_not_duplicated():
+    from app.config import BASE_DIR
+    text=(BASE_DIR/'app/main.py').read_text(encoding='utf-8')
+    assert text.count("async def _save_notification_form")==1
+    assert text.count("@app.post('/settings/notifications')")==1
+    assert text.count("@app.get('/logs'")==1
+    assert text.count("@app.get('/health')")==1
+
+
+def test_company_invalid_schedule_returns_400_not_500(monkeypatch):
+    from fastapi.testclient import TestClient
+    import app.main as m
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'web.db')
+        st.set_settings({'setup_complete':'true','organization_name':'Demo'})
+        for code in ('A','B','C'):
+            st.upsert_bank_source(source_id=None,code=code,name=code,country='HN',source_type='WEB_HTML',url='https://example.com',enabled=True,config_json='{}')
+        monkeypatch.setattr(m,'store',st)
+        m.settings.web_admin_user='admin'
+        m.settings.web_admin_password_hash=m.password_hash('admin123')
+        m.settings.web_session_secret='z'*48
+        client=TestClient(m.app)
+        login=client.post('/login',data={'user':'admin','password':'admin123'},follow_redirects=False)
+        cookie=login.cookies.get(m.COOKIE)
+        headers={'cookie':f'{m.COOKIE}={cookie}'}
+        r=client.post('/companies/save',headers=headers,data={
+            'company_name':'Demo','database_name':'SBO_DEMO','db_type':'HANA','environment':'TEST',
+            'sap_user':'manager','schedule_time':'99:99','primary_bank':'A',
+            'bank_sources':['A','B','C'],'currencies_csv':'USD','enabled':'on'
+        })
+        assert r.status_code==400
+        assert 'Hora inválida' in r.text
+
+
+def test_setup_can_reuse_preexisting_sources_after_partial_attempt(monkeypatch):
+    from fastapi.testclient import TestClient
+    import app.main as m
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'setup.db')
+        for code in ('BANK1','BANK2','BANK3'):
+            st.upsert_bank_source(source_id=None,code=code,name=code,country='HN',source_type='WEB_HTML',url=f'https://{code.lower()}.test',enabled=True,config_json='{"mode":"AUTO","currencies":["USD"]}')
+        monkeypatch.setattr(m,'store',st)
+        monkeypatch.setattr(m,'_set_env_value',lambda k,v:None)
+        monkeypatch.setattr(m,'fetch_source',lambda src,settings: object())
+        m.settings.web_session_secret='s'*48
+        client=TestClient(m.app)
+        data={
+          'organization_name':'Empresa Demo','admin_user':'admin5','admin_password':'Clave123!',
+          'service_layer_root':'https://sap1.local:50000/b1s','odata_version':'v2','sap_b1_version':'10.0',
+          'same_sap_credentials':'on','shared_sap_user':'manager','shared_sap_password':'Sap123!',
+          'company_name':['Empresa A'],'db_type':['HANA'],'database_name':['SBO_A'],
+          'environment':['TEST'],'company_service_root':[''],'company_odata':[''],
+          'sap_user':[''],'sap_password':[''],'schedule_time':'07:30','currencies_csv':'USD','primary_bank':'BANK1',
+          'source_code':['BANK1','BANK2','BANK3'],'source_name':['Banco 1','Banco 2','Banco 3'],'source_country':['HN','HN','HN'],
+          'source_type':['WEB_HTML','WEB_HTML','WEB_HTML'],
+          'source_url':['https://bank1.test','https://bank2.test','https://bank3.test'],
+          'source_config':['{"mode":"AUTO","currencies":["USD"]}']*3
+        }
+        r=client.post('/setup',data=data,follow_redirects=False)
+        assert r.status_code==303
+        assert len(st.list_bank_sources())==3
+        assert len(st.list_companies())==1
+
+
+def test_smtp_test_does_not_claim_success_when_notifications_disabled(monkeypatch):
+    from fastapi.testclient import TestClient
+    import app.main as m
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'web.db')
+        st.set_settings({'setup_complete':'true','organization_name':'Demo','notifications_enabled':'false'})
+        monkeypatch.setattr(m,'store',st)
+        m.settings.web_admin_user='admin'
+        m.settings.web_admin_password_hash=m.password_hash('admin123')
+        m.settings.web_session_secret='z'*48
+        client=TestClient(m.app)
+        login=client.post('/login',data={'user':'admin','password':'admin123'},follow_redirects=False)
+        cookie=login.cookies.get(m.COOKIE)
+        headers={'cookie':f'{m.COOKIE}={cookie}'}
+        r=client.post('/settings/notifications/test',headers=headers,data={
+            'smtp_host':'smtp.example.com','smtp_port':'587','smtp_security':'STARTTLS',
+            'smtp_user':'x@example.com','smtp_from':'x@example.com',
+            'notification_recipients':'a@example.com'
+        })
+        assert r.status_code==400
+        assert 'Active las notificaciones' in r.text
