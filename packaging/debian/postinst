@@ -1,10 +1,10 @@
 #!/bin/sh
 set -eu
-APP=/opt/sap-fx-control-center
-DATA=/var/lib/sap-fx-control-center
-LOG=/var/log/sap-fx-control-center
-CONF=/etc/sap-fx-control-center
-USER=sapfx
+APP=/opt/atas
+DATA=/var/lib/atas
+LOG=/var/log/atas
+CONF=/etc/atas
+USER=atas
 
 if ! id "$USER" >/dev/null 2>&1; then
   adduser --system --group --home "$DATA" --no-create-home "$USER"
@@ -28,6 +28,6 @@ chown "$USER:$USER" "$CONF/app.env"
 chmod 600 "$CONF/app.env"
 
 systemctl daemon-reload
-systemctl enable sap-fx-control-center.service >/dev/null 2>&1 || true
-systemctl restart sap-fx-control-center.service || true
+systemctl enable atas.service >/dev/null 2>&1 || true
+systemctl restart atas.service || true
 exit 0
