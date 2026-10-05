@@ -624,3 +624,21 @@ def test_scheduler_claim_migration_preserves_existing_last_run_date(tmp_path):
         con.close()
     row=st.get_company(cid)
     assert row['scheduler_claim_date']=='2026-10-05'
+
+
+def test_recover_stale_running_preserves_claim():
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'stale.db')
+        cid=add_company(st,auto_enabled=True,scheduled_write=True)
+        day=datetime.now(ZoneInfo('America/Tegucigalpa')).date().isoformat()
+        assert st.claim_daily_run(cid,day) is True
+        old=(datetime.now(ZoneInfo('America/Tegucigalpa'))-timedelta(minutes=30)).isoformat()
+        with st.conn() as con:
+            con.execute("UPDATE companies SET last_run_at=? WHERE id=?",(old,cid))
+        assert st.recover_stale_running(15)==1
+        row=st.get_company(cid)
+        assert row['last_run_status']=='INTERRUPTED'
+        assert row['scheduler_claim_date']==day
+        assert st.claim_daily_run(cid,day) is False

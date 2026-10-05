@@ -267,6 +267,28 @@ class Store:
             )
             return cur.rowcount==1
 
+    def recover_stale_running(self, stale_minutes:int=15) -> int:
+        """Mark abandoned RUNNING claims as INTERRUPTED without clearing the daily claim.
+
+        Safety policy: Atas never auto-retries a claimed day after a crash because
+        the process may have died after SAP accepted a write but before local
+        verification/audit finished. A human can inspect and run manually.
+        """
+        cutoff=(datetime.now(ZoneInfo(self.timezone))-timedelta(minutes=max(1,int(stale_minutes)))).isoformat()
+        now=self.now()
+        with self.conn() as con:
+            cur=con.execute(
+                """UPDATE companies
+                   SET last_run_status='INTERRUPTED',
+                       last_run_message='Ejecución interrumpida; no se reintentará automáticamente. Revise SAP y ejecute manualmente si corresponde.',
+                       updated_at=?
+                   WHERE last_run_status='RUNNING'
+                     AND last_run_at IS NOT NULL
+                     AND last_run_at<?""",
+                (now,cutoff),
+            )
+            return cur.rowcount
+
     def mark_run_result(self, company_id:int, day:str, status:str, message:str='') -> None:
         now=self.now()
         with self.conn() as con:
