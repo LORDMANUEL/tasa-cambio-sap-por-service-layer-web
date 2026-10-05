@@ -1,0 +1,23 @@
+[Unit]
+Description=SAP FX Control Center V5
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sapfx
+Group=sapfx
+WorkingDirectory=/opt/sap-fx-control-center
+Environment=PYTHONUNBUFFERED=1
+Environment=SAPFX_FERNET_KEY_FILE=/var/lib/sap-fx-control-center/.credential.key
+ExecStart=/opt/sap-fx-control-center/.venv/bin/python -m app.run_server
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/sap-fx-control-center /var/log/sap-fx-control-center /etc/sap-fx-control-center
+
+[Install]
+WantedBy=multi-user.target

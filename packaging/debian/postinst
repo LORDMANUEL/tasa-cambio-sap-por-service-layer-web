@@ -1,0 +1,29 @@
+#!/bin/sh
+set -eu
+APP=/opt/sap-fx-control-center
+DATA=/var/lib/sap-fx-control-center
+LOG=/var/log/sap-fx-control-center
+CONF=/etc/sap-fx-control-center
+USER=sapfx
+
+if ! id "$USER" >/dev/null 2>&1; then
+  adduser --system --group --home "$DATA" --no-create-home "$USER"
+fi
+
+mkdir -p "$DATA/uploads" "$LOG" "$CONF"
+if [ ! -f "$CONF/app.env" ]; then cp "$APP/.env.example" "$CONF/app.env"; fi
+rm -rf "$APP/data" "$APP/logs" "$APP/app/static/uploads"
+ln -s "$DATA" "$APP/data"
+ln -s "$LOG" "$APP/logs"
+ln -s "$DATA/uploads" "$APP/app/static/uploads"
+rm -f "$APP/.env"
+ln -s "$CONF/app.env" "$APP/.env"
+python3 -m venv "$APP/.venv"
+"$APP/.venv/bin/python" -m pip install --disable-pip-version-check --no-index --find-links "$APP/vendor/wheels" -r "$APP/requirements.txt"
+chown -R "$USER:$USER" "$DATA" "$LOG"
+chown "$USER:$USER" "$CONF/app.env"
+chmod 600 "$CONF/app.env"
+systemctl daemon-reload
+systemctl enable sap-fx-control-center.service >/dev/null 2>&1 || true
+systemctl restart sap-fx-control-center.service || true
+exit 0

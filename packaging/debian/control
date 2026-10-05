@@ -1,0 +1,11 @@
+Package: sap-fx-control-center
+Version: 5.0.0
+Section: office
+Priority: optional
+Architecture: amd64
+Maintainer: SAP FX Control Center Community
+Depends: python3 (>= 3.11), python3-venv, python3-pip, ca-certificates, xdg-utils
+Description: Local SAP Business One exchange-rate control center
+ Multi-company local web application for bank/API market sources, consensus
+ validation, scheduled exchange-rate updates through SAP Business One Service
+ Layer, audit history, reports, notifications and guided setup.
