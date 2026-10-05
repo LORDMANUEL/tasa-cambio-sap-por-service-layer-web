@@ -158,3 +158,53 @@ def test_release_packaging_files_are_present():
         'docs/V4_V5_DIFERENCIAS.md',
     ]
     assert all((BASE_DIR/p).exists() for p in required)
+
+
+def test_daily_scheduler_claim_is_atomic():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'scheduler.db')
+        cid=add_company(st,auto_enabled=True,scheduled_write=True,schedule_hour=0,schedule_minute=0)
+        day=datetime.now(ZoneInfo('America/Tegucigalpa')).date().isoformat()
+        assert st.claim_daily_run(cid,day) is True
+        assert st.claim_daily_run(cid,day) is False
+        row=st.get_company(cid)
+        assert row['last_run_date']==day
+        assert row['last_run_status']=='RUNNING'
+
+
+def test_daily_scheduler_runs_company_only_once(monkeypatch):
+    import app.sync_engine as se
+    from app.config import Settings
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'scheduler.db')
+        cid=add_company(st,auto_enabled=True,scheduled_write=True,schedule_hour=0,schedule_minute=0)
+        calls=[]
+        def fake_reconcile(settings,store,company_id,scheduled=True):
+            calls.append(company_id)
+            return {'company':'SBODEMO','rates':{'USD':{'status':'MATCH'}}}
+        monkeypatch.setattr(se,'reconcile_company',fake_reconcile)
+        first=se.run_due_schedules(Settings(),st)
+        second=se.run_due_schedules(Settings(),st)
+        assert len(first)==1
+        assert second==[]
+        assert calls==[cid]
+        assert st.get_company(cid)['last_run_status']=='OK'
+
+
+def test_daily_scheduler_claim_survives_unexpected_failure(monkeypatch):
+    import app.sync_engine as se
+    from app.config import Settings
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'scheduler.db')
+        cid=add_company(st,auto_enabled=True,scheduled_write=True,schedule_hour=0,schedule_minute=0)
+        def boom(*args,**kwargs):
+            raise RuntimeError('simulated scheduler crash')
+        monkeypatch.setattr(se,'reconcile_company',boom)
+        first=se.run_due_schedules(Settings(),st)
+        second=se.run_due_schedules(Settings(),st)
+        assert len(first)==1 and first[0]['error']=='simulated scheduler crash'
+        assert second==[]
+        row=st.get_company(cid)
+        assert row['last_run_status']=='ERROR'
