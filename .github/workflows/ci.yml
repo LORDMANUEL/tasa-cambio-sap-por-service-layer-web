@@ -1,21 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'app/**'
-      - 'tests/**'
-      - 'requirements.txt'
-      - 'pytest.ini'
-      - '.env.example'
-      - 'scripts/**'
-      - 'installer/**'
-      - 'packaging/**'
-      - 'ATAS.bat'
-      - 'VERSION.txt'
-      - '.github/workflows/ci.yml'
-      - '.github/workflows/build-installers.yml'
   pull_request:
     paths:
       - 'app/**'
