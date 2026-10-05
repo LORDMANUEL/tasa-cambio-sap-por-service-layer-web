@@ -514,3 +514,26 @@ def test_debian_packaging_keeps_persistent_data_out_of_opt_payload():
     assert 'migrate_and_link "$APP/data" "$DATA"' in post
     assert 'migrate_and_link "$APP/logs" "$LOG"' in post
     assert 'migrate_and_link "$APP/app/static/uploads" "$DATA/uploads"' in post
+
+
+def test_notification_classifies_blocked_run_as_attention():
+    from app.notifications import _result_needs_attention
+    assert _result_needs_attention({'rates':{'USD':{'status':'MATCH'},'EUR':{'status':'UPDATE_WRITE_BLOCKED'}}})
+    assert not _result_needs_attention({'rates':{'USD':{'status':'MATCH'}}})
+
+
+def test_notification_rejects_invalid_smtp_mode():
+    from app.notifications import send_email, NotificationError
+    from app.credential_store import encrypt_secret
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'smtp.db')
+        st.set_settings({
+            'notifications_enabled':'true','smtp_host':'smtp.example.com','smtp_port':'587',
+            'smtp_security':'INVALID','smtp_user':'u@example.com','smtp_from':'u@example.com',
+            'notification_recipients':'a@example.com','smtp_secret':encrypt_secret('secret')
+        })
+        try:
+            send_email(st,'x','y')
+            assert False
+        except NotificationError as exc:
+            assert 'Modo SMTP inválido' in str(exc)
