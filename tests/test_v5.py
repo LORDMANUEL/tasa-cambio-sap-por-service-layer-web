@@ -614,11 +614,17 @@ def test_scheduler_claim_migration_preserves_existing_last_run_date():
         st=Store(db)
         cid=add_company(st,database_name='MIGRATE_DB')
         st.mark_run_result(cid,'2026-10-05','OK','old version')
-        with sqlite3.connect(db) as con:
+        con=sqlite3.connect(db)
+        try:
             rows=con.execute('PRAGMA table_info(companies)').fetchall()
             # SQLite cannot DROP COLUMN reliably across old deployments; emulate
             # migration semantics directly by clearing the new field then validating
             # that an existing claim remains separate after normal operation.
             con.execute('UPDATE companies SET scheduler_claim_date=last_run_date WHERE id=?',(cid,))
+            con.commit()
+        finally:
+            # Windows keeps the database file locked until sqlite3.Connection.close().
+            # The connection context manager commits/rolls back, but does not close it.
+            con.close()
         row=st.get_company(cid)
         assert row['scheduler_claim_date']=='2026-10-05'
