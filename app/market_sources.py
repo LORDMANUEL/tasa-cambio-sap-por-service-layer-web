@@ -319,3 +319,74 @@ def scan_source(source: dict, settings: Settings) -> dict[str, Any]:
     snap = fetch_source(source, settings)
     return snap.serializable()
 
+
+def build_consensus(store, settings: Settings, company: dict, currencies: list[str]) -> MarketConsensus:
+    configured = [x.strip().upper() for x in str(company.get("bank_source_codes") or "").split(",") if x.strip()]
+    primary = str(company.get("primary_bank") or "").upper().strip()
+    if primary and primary not in configured:
+        configured.insert(0, primary)
+    configured = list(dict.fromkeys(configured))
+    if len(configured) < 3:
+        return MarketConsensus(False, primary, {}, {}, {}, [], {}, ["Configure al menos 3 fuentes bancarias para esta base."], [])
+
+    sources = {s["code"].upper(): s for s in store.list_bank_sources(enabled_only=True)}
+    snapshots: list[SourceSnapshot] = []
+    failed: dict[str, str] = {}
+    for code in configured:
+        src = sources.get(code)
+        if not src:
+            failed[code] = "Fuente inexistente o deshabilitada"
+            continue
+        try:
+            snap = fetch_source(src, settings)
+            snapshots.append(snap)
+            store.mark_bank_source_result(src["id"], True, "OK")
+        except Exception as exc:
+            failed[code] = str(exc)
+            store.mark_bank_source_result(src["id"], False, str(exc))
+
+    warnings: list[str] = []
+    official_rates: dict[str, Decimal] = {}
+    medians: dict[str, Decimal] = {}
+    deviations: dict[str, Decimal] = {}
+    max_dev = Decimal(str(store.get_settings().get("max_source_deviation_percent", settings.max_bank_spread_percent)))
+    min_sources = max(3, int(store.get_settings().get("min_market_sources", "3") or 3))
+    by_code = {s.code.upper(): s for s in snapshots}
+    if primary not in by_code:
+        warnings.append(f"La fuente oficial {primary or '(sin definir)'} no respondió correctamente.")
+
+    for cur in currencies:
+        values: list[tuple[str, Decimal]] = []
+        for snap in snapshots:
+            pair = snap.rates.get(cur.upper())
+            if pair and pair.get("sell"):
+                values.append((snap.code.upper(), pair["sell"]))
+        if len(values) < min_sources:
+            warnings.append(f"{cur}: sólo {len(values)} fuentes válidas; se requieren {min_sources}.")
+            continue
+        med = Decimal(str(median([v for _, v in values])))
+        medians[cur] = med
+        if primary in by_code and cur in by_code[primary].rates:
+            official = by_code[primary].rates[cur]["sell"]
+            official_rates[cur] = official
+            dev = (abs(official - med) / med * Decimal("100")) if med else Decimal("999")
+            deviations[cur] = dev
+            if dev > max_dev:
+                warnings.append(f"{cur}: fuente oficial difiere {dev:.3f}% del consenso (máx. {max_dev}%).")
+        for code, value in values:
+            dev = (abs(value - med) / med * Decimal("100")) if med else Decimal("999")
+            if dev > max_dev:
+                warnings.append(f"{cur}: {code} es posible outlier ({dev:.3f}% vs mediana).")
+
+    safe = not warnings and all(cur.upper() in official_rates for cur in currencies)
+    return MarketConsensus(
+        safe=safe,
+        official_source=primary,
+        official_rates=official_rates,
+        medians=medians,
+        deviations_percent=deviations,
+        successful_sources=[s.code for s in snapshots],
+        failed_sources=failed,
+        warnings=warnings,
+        snapshots=snapshots,
+    )
