@@ -97,3 +97,101 @@ def _decimal(value: Any) -> Decimal:
         raise MarketSourceError(f"La tasa debe ser mayor que cero: {value}")
     return out
 
+
+def _json_path(data: Any, path: str) -> Any:
+    cur = data
+    for token in re.findall(r"[^.\[\]]+|\[\d+\]", path.strip()):
+        if token.startswith("["):
+            cur = cur[int(token[1:-1])]
+        elif isinstance(cur, dict):
+            cur = cur[token]
+        else:
+            raise KeyError(path)
+    return cur
+
+
+def _normalize_config(source: dict) -> dict:
+    raw = source.get("config_json") or "{}"
+    if isinstance(raw, dict):
+        return raw
+    try:
+        return json.loads(raw)
+    except Exception as exc:
+        raise MarketSourceError("config_json de la fuente no es JSON válido.") from exc
+
+
+def _headers(source: dict) -> dict[str, str]:
+    raw = source.get("headers_json") or "{}"
+    try:
+        obj = raw if isinstance(raw, dict) else json.loads(raw)
+        headers={str(k):str(v) for k,v in obj.items()} if isinstance(obj,dict) else {}
+    except Exception:
+        headers={}
+    secret=source.get("secret_headers_blob")
+    if secret:
+        try:
+            obj=json.loads(decrypt_secret(secret))
+            if isinstance(obj,dict): headers.update({str(k):str(v) for k,v in obj.items()})
+        except Exception as exc:
+            raise MarketSourceError("No se pudieron descifrar los headers secretos de la API.") from exc
+    return headers
+
+
+def _fetch_http(source: dict, settings: Settings) -> requests.Response:
+    url = _safe_url(source.get("url", ""))
+    session = secure_session()
+    try:
+        response = session.get(
+            url,
+            headers=_headers(source),
+            timeout=min(max(int(source.get("timeout_seconds") or settings.request_timeout_seconds), 3), 60),
+            verify=bool(source.get("tls_verify", 1)),
+            allow_redirects=True,
+        )
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        raise MarketSourceError(f"No se pudo consultar la fuente: {exc.__class__.__name__}") from exc
+    if len(response.content) > 4_000_000:
+        raise MarketSourceError("La respuesta excede 4 MB; no se procesará.")
+    return response
+
+
+def _auto_html(text: str, currency: str) -> dict[str, Decimal]:
+    normalized = re.sub(r"\s+", " ", text)
+    positions = [m.start() for m in re.finditer(rf"\b{re.escape(currency)}\b", normalized, re.I)]
+    aliases = {"USD": ["DOLAR", "DÓLAR", "DOLLAR"], "EUR": ["EURO"]}.get(currency.upper(), [])
+    for alias in aliases:
+        positions.extend(m.start() for m in re.finditer(re.escape(alias), normalized, re.I))
+    for pos in sorted(set(positions))[:20]:
+        window = normalized[pos:pos + 500]
+        nums = re.findall(r"(?<!\d)(\d{1,6}(?:[.,]\d{2,6})?)(?!\d)", window)
+        vals: list[Decimal] = []
+        for n in nums:
+            try:
+                v = _decimal(n)
+                if Decimal("0.00001") < v < Decimal("1000000"):
+                    vals.append(v)
+            except Exception:
+                pass
+        buy = re.search(r"(?:compra|buy|purchase)\D{0,30}(\d{1,6}(?:[.,]\d{2,6})?)", window, re.I)
+        sell = re.search(r"(?:venta|sell|sale)\D{0,30}(\d{1,6}(?:[.,]\d{2,6})?)", window, re.I)
+        if buy and sell:
+            return {"buy": _decimal(buy.group(1)), "sell": _decimal(sell.group(1))}
+        if len(vals) >= 2:
+            return {"buy": vals[0], "sell": vals[1]}
+    raise MarketSourceError(f"AUTO no encontró compra/venta para {currency}.")
+
+
+def _extract_html(html: str, config: dict) -> dict[str, dict[str, Decimal]]:
+    soup = BeautifulSoup(html, "html.parser")
+    text = " ".join(soup.stripped_strings)
+    mode = str(config.get("mode", "AUTO")).upper()
+    currencies = [str(x).upper() for x in config.get("currencies", ["USD", "EUR"])]
+    out: dict[str, dict[str, Decimal]] = {}
+    if mode == "AUTO":
+        for cur in currencies:
+            out[cur] = _auto_html(text, cur)
+        return out
+    mapping = config.get("mapping") or {}
+    for cur in currencies:
+        spec = mapping.get(cur) or mapping.get(cur.lower()) or {}
