@@ -1,0 +1,81 @@
+name: Build installers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    env:
+      PYTHON_EMBED_VERSION: '3.13.14'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Test application
+        shell: pwsh
+        run: |
+          python -m pip install -r requirements.txt
+          python -m compileall -q app
+          python -m pytest -q
+      - name: Assemble embedded Python package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/windows-package/runtime/python | Out-Null
+          $url = "https://www.python.org/ftp/python/$env:PYTHON_EMBED_VERSION/python-$env:PYTHON_EMBED_VERSION-embed-amd64.zip"
+          Invoke-WebRequest $url -OutFile dist/python-embed.zip
+          Expand-Archive dist/python-embed.zip -DestinationPath dist/windows-package/runtime/python -Force
+          New-Item -ItemType Directory -Force dist/windows-package/runtime/python/Lib/site-packages | Out-Null
+          python -m pip install --disable-pip-version-check -r requirements.txt --target dist/windows-package/runtime/python/Lib/site-packages
+          $pth = Get-ChildItem dist/windows-package/runtime/python -Filter 'python*._pth' | Select-Object -First 1
+          @('python313.zip','.','Lib','Lib\site-packages','import site') | Set-Content -Encoding ASCII $pth.FullName
+      - name: Copy application payload
+        shell: pwsh
+        run: |
+          $exclude = @('.git','.github','.venv','dist','build','runtime','.pytest_cache','__pycache__','.env','site')
+          Get-ChildItem -Force | Where-Object { $exclude -notcontains $_.Name } | ForEach-Object { Copy-Item $_.FullName -Destination dist/windows-package -Recurse -Force }
+          if (Test-Path dist/windows-package/data/tasa_v5.db) { Remove-Item dist/windows-package/data/tasa_v5.db -Force }
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+      - name: Build EXE
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/installer | Out-Null
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer/windows/SAPFXControlCenter.iss "/DSourceDir=$pwd\dist\windows-package" "/DOutputDir=$pwd\dist\installer"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SAP-FX-Control-Center-Windows-x64
+          path: dist/installer/*.exe
+          if-no-files-found: error
+  debian-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Test application
+        env:
+          SAPFX_FERNET_KEY_FILE: ${{ runner.temp }}/sapfx-ci.key
+        run: |
+          python -m pip install -r requirements.txt
+          python -m compileall -q app
+          python -m pytest -q
+      - name: Install packaging tools
+        run: sudo apt-get update && sudo apt-get install -y rsync dpkg-dev
+      - name: Build DEB
+        run: VERSION=5.0.0 ./scripts/build_deb.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SAP-FX-Control-Center-Debian-amd64
+          path: dist/*.deb
+          if-no-files-found: error
