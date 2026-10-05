@@ -187,6 +187,7 @@ def reconcile_company(settings:Settings, store:Store, company_id:int, *, schedul
         log.exception('SAP reconciliation failed company=%s',row['database_name'])
         result['error']=str(exc)
         record_system_error(store,row,str(exc),'reconcile')
+        result['error_recorded']=True
         return result
 
 
@@ -233,7 +234,7 @@ def run_due_schedules(settings:Settings, store:Store) -> list[dict]:
             result={'company':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'rates':{},'error':str(exc)}
         status,message=_run_status(result)
         store.mark_run_result(row['id'],today,status,message)
-        if result.get('error'):
+        if result.get('error') and not result.get('error_recorded'):
             record_system_error(store,row,result['error'],'scheduler')
         out.append(result)
     return out
