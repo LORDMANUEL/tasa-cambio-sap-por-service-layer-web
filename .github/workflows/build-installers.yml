@@ -50,6 +50,31 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist/installer | Out-Null
           & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer/windows/Atas.iss "/DSourceDir=$pwd\dist\windows-package" "/DOutputDir=$pwd\dist\installer"
+      - name: Smoke test installed Windows EXE
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem dist/installer/*.exe | Select-Object -First 1
+          $target = Join-Path $env:RUNNER_TEMP 'AtasSmoke'
+          if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+          & $exe.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR="$target"
+          if ($LASTEXITCODE -ne 0) { throw "Atas installer returned $LASTEXITCODE" }
+          if (-not (Test-Path "$target\runtime\python\python.exe")) { throw "Embedded Python missing after install" }
+          if (-not (Test-Path "$target\app\main.py")) { throw "Atas application missing after install" }
+          $proc = Start-Process -FilePath "$target\runtime\python\python.exe" -ArgumentList '-m','app.run_server' -WorkingDirectory $target -PassThru
+          try {
+            $ok = $false
+            for ($i=0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $h = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/health' -TimeoutSec 2
+                if ($h.status -eq 'ok' -and $h.service -eq 'Atas') { $ok = $true; break }
+              } catch {}
+            }
+            if (-not $ok) { throw "Installed Atas did not pass /health smoke test" }
+            Write-Host "ATAS_WINDOWS_SMOKE=OK"
+          } finally {
+            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
       - name: Inspect Windows package
         shell: pwsh
         run: |
@@ -102,6 +127,32 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rsync dpkg-dev
       - name: Build DEB
         run: VERSION=5.0.0 ./scripts/build_deb.sh
+      - name: Install and smoke test Debian package
+        run: |
+          DEB=$(ls dist/atas_*.deb | head -1)
+          sudo apt-get install -y "$DEB"
+          test -x /opt/atas/.venv/bin/python
+          test -f /opt/atas/app/main.py
+          cd /opt/atas
+          sudo -u atas env SAPFX_FERNET_KEY_FILE=/var/lib/atas/.credential.key /opt/atas/.venv/bin/python -m app.run_server > /tmp/atas-smoke.log 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          OK=0
+          for i in $(seq 1 30); do
+            sleep 1
+            if curl -fsS http://127.0.0.1:8787/health | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['status']=='ok' and d['service']=='Atas'" 2>/dev/null; then
+              OK=1
+              break
+            fi
+          done
+          if [ "$OK" -ne 1 ]; then
+            cat /tmp/atas-smoke.log
+            exit 1
+          fi
+          echo "ATAS_DEBIAN_SMOKE=OK"
+          kill $PID 2>/dev/null || true
+          trap - EXIT
+          cd "$GITHUB_WORKSPACE"
       - name: Inspect Debian package
         run: |
           DEB=$(ls dist/atas_*.deb | head -1)
