@@ -72,7 +72,7 @@ def test_v5_visual_system_and_setup_builder_present():
     assert 'process-workflow-card' in css and '.setup-shell' in css and '.kpi-grid' in css
     assert 'data-add-company' in js and 'RECORRIDO GUIADO' in js and 'Trayendo datos del banco oficial' in js
     assert "@app.get('/setup'" in main and 'same_sap_credentials' in main and 'smtp_host' in main
-    assert Settings().app_name=='SAP FX Control Center V5'
+    assert Settings().app_name=='Atas V5'
 
 def test_health_and_setup_page(monkeypatch):
     from fastapi.testclient import TestClient
