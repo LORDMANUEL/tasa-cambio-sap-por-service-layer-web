@@ -401,3 +401,60 @@ def report_err(req:Request):
     if not _authed(req): return _redirect_login()
     return _csv(store.list_transactions(5000,status='ERROR'),'sap_fx_errores.csv')
 
+
+# ---------------------------------------------------------------------------
+# Reusable settings / branding / notifications
+# ---------------------------------------------------------------------------
+@app.get('/settings',response_class=HTMLResponse)
+def settings_page(req:Request):
+    if not _authed(req): return _redirect_login()
+    c=_cfg(); notif=c.get('notifications_enabled','false').lower()=='true'; logo=_logo_url(); recipients=c.get('notification_recipients','')
+    body=page_header('Configuración','Identidad, integración SAP y notificaciones del producto.')+f"""
+<div class='settings-grid'><form class='card' method='post' action='/settings/general' enctype='multipart/form-data' data-process='Guardando configuración general'><div class='section-title'><h2>Empresa e integración predeterminada</h2><span class='pill'>Reutilizable</span></div><div class='brand-config compact'><label class='logo-drop'>{f'<img src="{esc(logo)}">' if logo else '<span>▧</span>'}<b>Cambiar logo</b><input type='file' name='logo' accept='.png,.jpg,.jpeg,.webp'></label><div><label>Nombre empresa</label><input name='organization_name' value='{esc(c.get('organization_name',''))}' required><label>Service Layer raíz</label><input name='service_layer_root' value='{esc(c.get('service_layer_root',''))}' required><div class='form-grid cols2'><div><label>OData</label><select name='odata_version'><option {'selected' if c.get('odata_version')=='v2' else ''}>v2</option><option {'selected' if c.get('odata_version')=='v1' else ''}>v1</option></select></div><div><label>Versión SAP B1</label><input name='sap_b1_version' value='{esc(c.get('sap_b1_version','10.0'))}'></div><div><label>Zona horaria</label><input name='timezone' value='{esc(c.get('timezone',settings.timezone))}' placeholder='America/Tegucigalpa'></div></div></div></div><button class='btn primary'>Guardar</button></form>
+<form class='card' method='post' action='/settings/notifications' data-process='Guardando notificaciones'><div class='section-title'><h2>Notificaciones de salida</h2>{badge('ACTIVAS' if notif else 'OPCIONALES')}</div><label class='switchline'><input type='checkbox' name='notifications_enabled' {'checked' if notif else ''}> Habilitar correo saliente</label><div class='form-grid cols2'><div><label>SMTP</label><input name='smtp_host' value='{esc(c.get('smtp_host',''))}'></div><div><label>Puerto</label><input name='smtp_port' value='{esc(c.get('smtp_port','587'))}'></div><div><label>Seguridad</label><select name='smtp_security'><option {'selected' if c.get('smtp_security')=='STARTTLS' else ''}>STARTTLS</option><option {'selected' if c.get('smtp_security')=='SSL' else ''}>SSL</option><option {'selected' if c.get('smtp_security')=='NONE' else ''}>NONE</option></select></div><div><label>Usuario / cuenta</label><input name='smtp_user' value='{esc(c.get('smtp_user',''))}'></div><div><label>Remitente</label><input name='smtp_from' value='{esc(c.get('smtp_from',''))}'></div><div><label>Nueva clave/App Password</label><input type='password' name='smtp_password' placeholder='Vacío = conservar'></div><div class='span2'><label>Destinatarios</label><input name='notification_recipients' value='{esc(recipients)}'></div></div><div class='actions'><button class='btn primary'>Guardar correo</button><button class='btn secondary' formaction='/settings/notifications/test'>Enviar prueba</button></div></form><form class='card' method='post' action='/settings/admin' data-process='Actualizando administrador web'><div class='section-title'><h2>Administrador web</h2><span class='pill'>Local</span></div><p class='muted'>Cambia el usuario y contraseña usados para entrar al panel.</p><div class='form-grid cols2'><div><label>Usuario actual</label><input value='{esc(settings.web_admin_user)}' disabled></div><div><label>Contraseña actual</label><input type='password' name='current_password' required></div><div><label>Nuevo usuario</label><input name='new_user' value='{esc(settings.web_admin_user)}' required></div><div><label>Nueva contraseña</label><input type='password' name='new_password' minlength='6' required></div></div><button class='btn primary'>Actualizar administrador</button></form></div>"""
+    return HTMLResponse(_ui('Configuración',body))
+
+@app.post('/settings/general')
+async def settings_general(req:Request, logo:UploadFile|None=File(default=None)):
+    if not _authed(req): return _redirect_login()
+    f=await req.form(); root=re.sub(r'/v\d+$','',str(f.get('service_layer_root','')).strip().rstrip('/'),flags=re.I); od=str(f.get('odata_version','v2')).lower(); tz=str(f.get('timezone',settings.timezone)).strip(); ZoneInfo(tz); vals={'organization_name':str(f.get('organization_name','')).strip(),'service_layer_root':root,'odata_version':od,'sap_b1_version':str(f.get('sap_b1_version','')).strip(),'sap_base_url':_endpoint(root,od),'timezone':tz}; _set_env_value('TIMEZONE',tz); settings.timezone=tz; store.timezone=tz
+    if logo and logo.filename: vals['organization_logo']=_save_logo(logo)
+    store.set_settings(vals); return RedirectResponse('/settings',303)
+
+async def _save_notification_form(form):
+    vals={'notifications_enabled':'true' if 'notifications_enabled' in form else 'false','smtp_host':str(form.get('smtp_host','')).strip(),'smtp_port':str(form.get('smtp_port','587')).strip(),'smtp_security':str(form.get('smtp_security','STARTTLS')).strip(),'smtp_user':str(form.get('smtp_user','')).strip(),'smtp_from':str(form.get('smtp_from','')).strip(),'notification_recipients':str(form.get('notification_recipients','')).strip()}
+    pwd=str(form.get('smtp_password',''))
+    if pwd: vals['smtp_secret']=encrypt_secret(pwd)
+    store.set_settings(vals)
+
+@app.post('/settings/notifications')
+async def settings_notifications(req:Request):
+    if not _authed(req): return _redirect_login()
+    f=await req.form(); await _save_notification_form(f); return RedirectResponse('/settings',303)
+
+@app.post('/settings/notifications/test',response_class=HTMLResponse)
+async def settings_notifications_test(req:Request):
+    if not _authed(req): return _redirect_login()
+    f=await req.form(); await _save_notification_form(f)
+    try: result=send_email(store,'Prueba SAP FX Control Center',f'Notificación de prueba enviada correctamente desde {_org()}.')
+    except Exception as exc: return HTMLResponse(_ui('Notificaciones',f"<div class='card error-panel'><h2>No se pudo enviar</h2><p>{esc(exc)}</p><a class='btn' href='/settings'>Volver</a></div>"),400)
+    return HTMLResponse(_ui('Notificaciones',f"<div class='card success-panel'><h2>Correo enviado</h2><p>Destinatarios: {result.get('recipients',0)}</p><a class='btn primary' href='/settings'>Volver</a></div>"))
+
+@app.post('/settings/admin')
+async def settings_admin(req:Request):
+    if not _authed(req): return _redirect_login()
+    f=await req.form(); current=str(f.get('current_password','')); new_user=str(f.get('new_user','')).strip(); new_pwd=str(f.get('new_password',''))
+    if not verify_password(current,settings.web_admin_password_hash): return HTMLResponse(_ui('Configuración',"<div class='card error-panel'><h2>Contraseña actual incorrecta</h2><a class='btn' href='/settings'>Volver</a></div>"),400)
+    if not new_user or len(new_pwd)<6: return HTMLResponse('Datos inválidos',400)
+    h=password_hash(new_pwd); _set_env_value('WEB_ADMIN_USER',new_user); _set_env_value('WEB_ADMIN_PASSWORD_HASH',h); settings.web_admin_user=new_user; settings.web_admin_password_hash=h
+    r=RedirectResponse('/login',303); r.delete_cookie(COOKIE); return r
+
+@app.get('/logs',response_class=HTMLResponse)
+def logs(req:Request):
+    if not _authed(req): return _redirect_login()
+    p=settings.log_path/'sap_fx_service.log'; text='Sin log todavía.'
+    if p.exists(): text=''.join(p.read_text(encoding='utf-8',errors='replace').splitlines(True)[-600:])
+    return HTMLResponse(_ui('Logs',page_header('Logs técnicos','Últimas 600 líneas.')+f"<div class='card'><pre>{esc(text)}</pre></div>"))
+
+@app.get('/health')
+def health(): return {'status':'ok','service':'SAP FX Control Center','version':'5.0.0','setup_complete':_setup_complete(),'enabled_companies':len(store.list_companies(True)),'local_only':True}
