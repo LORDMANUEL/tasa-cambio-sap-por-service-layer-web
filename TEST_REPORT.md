@@ -4,7 +4,7 @@ Validación ejecutada sobre el paquete final.
 
 ## Suite automática
 
-- `pytest`: **28 passed**
+- `pytest`: **53 passed**
 - `compileall app`: OK
 - `node --check app/static/app.js`: OK
 
