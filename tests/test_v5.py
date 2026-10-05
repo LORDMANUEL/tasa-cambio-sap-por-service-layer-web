@@ -283,6 +283,7 @@ def test_reconcile_records_bank_validation_failure_once(monkeypatch):
             official_rates={},
             successful_sources=['A','B','C'],
             failed_sources={},
+            notices=[],
         )
         monkeypatch.setattr(se,'_comparison',lambda settings,store,row:fake)
         result=se.reconcile_company(Settings(),st,cid,scheduled=True)
@@ -306,6 +307,7 @@ def test_reconcile_records_missing_credentials_once(monkeypatch):
             official_rates={'USD':Decimal('27.02'),'EUR':Decimal('33.90')},
             successful_sources=['A','B','C'],
             failed_sources={},
+            notices=[],
         )
         monkeypatch.setattr(se,'_comparison',lambda settings,store,row:fake)
         result=se.reconcile_company(Settings(),st,cid,scheduled=True)
