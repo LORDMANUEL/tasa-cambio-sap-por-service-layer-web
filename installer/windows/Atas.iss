@@ -1,6 +1,6 @@
 #define MyAppName "Atas"
 #define MyAppVersion "5.0.0"
-#define MyAppPublisher "LORDMANUEL"
+#define MyAppPublisher "Luis Manuel Fajardo Rivera (LORDMANUEL)"
 #define MyAppURL "https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web"
 #ifndef SourceDir
   #define SourceDir "..\..\dist\windows-package"
