@@ -49,7 +49,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist/installer | Out-Null
-          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer/windows/SAPFXControlCenter.iss "/DSourceDir=$pwd\dist\windows-package" "/DOutputDir=$pwd\dist\installer"
+          & 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer/windows/Atas.iss "/DSourceDir=$pwd\dist\windows-package" "/DOutputDir=$pwd\dist\installer"
       - name: Inspect Windows package
         shell: pwsh
         run: |
