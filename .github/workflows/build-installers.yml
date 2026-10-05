@@ -130,7 +130,7 @@ jobs:
       - name: Install and smoke test Debian package
         run: |
           DEB=$(ls dist/atas_*.deb | head -1)
-          sudo apt-get install -y "$DEB"
+          sudo apt-get install -y "./$DEB"
           test -x /opt/atas/.venv/bin/python
           test -f /opt/atas/app/main.py
           cd /opt/atas
