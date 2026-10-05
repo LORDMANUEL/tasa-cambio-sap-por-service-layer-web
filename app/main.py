@@ -23,7 +23,7 @@ from app.web_auth import COOKIE, sign_session, verify_session, verify_password, 
 from app.dashboard import layout, esc, badge, page_header
 from app.bank_registry import BANKS, automatic_banks
 from app.providers import get_provider
-from app.market_sources import fetch_source, scan_source, MarketSourceError
+from app.market_sources import fetch_source, scan_source, validate_snapshot_pairs, MarketSourceError
 from app.sync_engine import inspect_company, write_suggested_manual, run_due_schedules, reconcile_company, _run_status
 from app.notifications import send_email, send_run_summary, recipients_from_text
 from app.version import get_version
@@ -193,7 +193,9 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
             if not src['code'] or not src['name']: continue
             temp_sources.append(src)
             try:
-                fetch_source(src,settings); valid_sources.append(src['code'])
+                snap=fetch_source(src,settings)
+                validate_snapshot_pairs(snap,store.get_settings().get('max_pair_spread_percent','35.0'))
+                valid_sources.append(src['code'])
             except Exception as exc:
                 source_errors.append(f"{src['code']}: {exc}")
         valid_sources=list(dict.fromkeys(valid_sources))
@@ -279,7 +281,7 @@ def home(req:Request):
     latest_ok=next((x for x in tx if x['status']!='ERROR'),None); latest_err=next((x for x in tx if x['status']=='ERROR'),None)
     next_runs=[]
     for c in active:
-        if c.get('auto_enabled'): next_runs.append(f"<div class='mini-run'><span>{esc(c['company_name'])}</span><b>{int(c['schedule_hour']):02d}:{int(c['schedule_minute']):02d}</b><small>{'USD ' if c['use_usd'] else ''}{'EUR' if c['use_eur'] else ''}</small></div>")
+        if c.get('auto_enabled'): next_runs.append(f"<div class='mini-run'><span>{esc(c['company_name'])}</span><b>{int(c['schedule_hour']):02d}:{int(c['schedule_minute']):02d}</b><small>{esc(c.get('currencies_csv') or '—')}</small></div>")
     rows=''.join(f"<tr><td>{esc(x['occurred_at'][:19].replace('T',' '))}</td><td>{esc(x['company_db'])}</td><td>{esc(x['currency'])}</td><td>{esc(x['sap_before'] or '—')}</td><td>{esc(x['bank_rate'] or '—')}</td><td>{badge(x['status'])}</td></tr>" for x in tx) or "<tr><td colspan='6' class='empty'>Aún no hay transacciones.</td></tr>"
     bank_status='En línea' if sources and all((x.get('last_status') in {None,'OK'}) for x in sources) else ('Sin fuentes' if not sources else 'Revisar')
     body=f"""
@@ -374,7 +376,7 @@ def automation(req:Request):
     if not _authed(req): return _redirect_login()
     cfg=_cfg(); prod=cfg.get('prod_automation_enabled','false').lower()=='true'; cards=''
     for c in store.list_companies(True):
-        cards+=f"<article class='automation-card'><div><span class='env-tag {c['environment'].lower()}'>{c['environment']}</span><h3>{esc(c['company_name'])}</h3><code>{esc(c['database_name'])}</code></div><div class='automation-time'><span>Diario</span><b>{int(c['schedule_hour']):02d}:{int(c['schedule_minute']):02d}</b><small>{'USD ' if c['use_usd'] else ''}{'EUR' if c['use_eur'] else ''}</small></div><div class='automation-status'><span>Última ejecución</span><b>{esc((c.get('last_run_at') or '—')[:19].replace('T',' '))}</b>{badge(c.get('last_run_status') or 'PENDIENTE')}</div><form method='post' action='/automation/run/{c['id']}' data-process='Ejecutando {esc(c['company_name'])}' data-process-detail='Banco → validación → SAP → comparación → escritura → verificación → auditoría.'><button class='btn primary'>▶ Ejecutar ahora</button></form></article>"
+        cards+=f"<article class='automation-card'><div><span class='env-tag {c['environment'].lower()}'>{c['environment']}</span><h3>{esc(c['company_name'])}</h3><code>{esc(c['database_name'])}</code></div><div class='automation-time'><span>Diario</span><b>{int(c['schedule_hour']):02d}:{int(c['schedule_minute']):02d}</b><small>{esc(c.get('currencies_csv') or '—')}</small></div><div class='automation-status'><span>Última ejecución</span><b>{esc((c.get('last_run_at') or '—')[:19].replace('T',' '))}</b>{badge(c.get('last_run_status') or 'PENDIENTE')}</div><form method='post' action='/automation/run/{c['id']}' data-process='Ejecutando {esc(c['company_name'])}' data-process-detail='Banco → validación → SAP → comparación → escritura → verificación → auditoría.'><button class='btn primary'>▶ Ejecutar ahora</button></form></article>"
     body=page_header('Automatización','Una ejecución diaria por base, con auditoría y verificación.')+f"<div class='prod-control card'><div><div class='eyebrow'>ESCRITURA PRODUCTIVA</div><h2>{'PROD habilitado' if prod else 'PROD bloqueado'}</h2><p>{'Las bases PROD autorizadas pueden escribir.' if prod else 'Las bases PROD permanecen en lectura.'}</p></div><form method='post' action='/automation/prod-toggle'><input type='hidden' name='enabled' value='{'false' if prod else 'true'}'><button class='btn {'danger' if prod else 'primary'}'>{'Bloquear PROD' if prod else 'Habilitar PROD'}</button></form></div><div class='automation-list'>{cards or '<div class="card empty">No hay bases activas.</div>'}</div>"
     return HTMLResponse(_ui('Automatización',body))
 
@@ -420,7 +422,7 @@ async def banks_save(req:Request):
         secret_headers=str(f.get('secret_headers_json','')).strip()
         if secret_headers:
             import json as _json; _json.loads(secret_headers); store.set_bank_source_secret_headers(source_id,encrypt_secret(secret_headers))
-        src=store.get_bank_source(source_id); fetch_source(src,settings); store.mark_bank_source_result(source_id,True,'OK')
+        src=store.get_bank_source(source_id); snap=fetch_source(src,settings); validate_snapshot_pairs(snap,store.get_settings().get('max_pair_spread_percent','35.0')); store.mark_bank_source_result(source_id,True,'OK')
     except Exception as exc:
         if source_id: store.mark_bank_source_result(source_id,False,str(exc))
         return HTMLResponse(_ui('Error de fuente',f"<div class='card error-panel'><h2>No se pudo validar la fuente</h2><p>{esc(exc)}</p><a class='btn' href='/banks'>Volver</a></div>"),400)
@@ -443,7 +445,7 @@ def banks_test_one(source_id:int,req:Request):
     if not _authed(req): return _redirect_login()
     src=store.get_bank_source(source_id)
     if not src: return HTMLResponse('Fuente no encontrada',404)
-    try: fetch_source(src,settings); store.mark_bank_source_result(source_id,True,'OK')
+    try: snap=fetch_source(src,settings); validate_snapshot_pairs(snap,store.get_settings().get('max_pair_spread_percent','35.0')); store.mark_bank_source_result(source_id,True,'OK')
     except Exception as exc: store.mark_bank_source_result(source_id,False,str(exc))
     return RedirectResponse('/banks',303)
 
@@ -451,7 +453,7 @@ def banks_test_one(source_id:int,req:Request):
 def banks_test_all(req:Request):
     if not _authed(req): return _redirect_login()
     for src in store.list_bank_sources(enabled_only=True):
-        try: fetch_source(src,settings); store.mark_bank_source_result(src['id'],True,'OK')
+        try: snap=fetch_source(src,settings); validate_snapshot_pairs(snap,store.get_settings().get('max_pair_spread_percent','35.0')); store.mark_bank_source_result(src['id'],True,'OK')
         except Exception as exc: store.mark_bank_source_result(src['id'],False,str(exc))
     return RedirectResponse('/banks',303)
 

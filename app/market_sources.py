@@ -317,11 +317,13 @@ def fetch_source(source: dict, settings: Settings) -> SourceSnapshot:
 def scan_source(source: dict, settings: Settings) -> dict[str, Any]:
     """Fetch and return a diagnostic preview without persisting configuration."""
     snap = fetch_source(source, settings)
+    validate_snapshot_pairs(snap)
     return snap.serializable()
 
 
-def _validate_snapshot_pairs(snapshot: SourceSnapshot, max_pair_spread_percent: Decimal) -> None:
-    """Reject structurally implausible buy/sell pairs before consensus."""
+def validate_snapshot_pairs(snapshot: SourceSnapshot, max_pair_spread_percent: Decimal | str | float = "35.0") -> None:
+    """Reject structurally implausible buy/sell pairs before consensus or UI approval."""
+    limit = Decimal(str(max_pair_spread_percent))
     for cur, pair in snapshot.rates.items():
         buy = Decimal(str(pair.get("buy")))
         sell = Decimal(str(pair.get("sell")))
@@ -330,9 +332,9 @@ def _validate_snapshot_pairs(snapshot: SourceSnapshot, max_pair_spread_percent: 
         if sell < buy:
             raise MarketSourceError(f"{snapshot.code} {cur}: venta {sell} es menor que compra {buy}.")
         spread = (sell - buy) / buy * Decimal("100")
-        if spread > max_pair_spread_percent:
+        if spread > limit:
             raise MarketSourceError(
-                f"{snapshot.code} {cur}: spread compra/venta {spread:.3f}% excede {max_pair_spread_percent}%."
+                f"{snapshot.code} {cur}: spread compra/venta {spread:.3f}% excede {limit}%."
             )
 
 
@@ -357,7 +359,7 @@ def build_consensus(store, settings: Settings, company: dict, currencies: list[s
             continue
         try:
             snap = fetch_source(src, settings)
-            _validate_snapshot_pairs(snap, max_pair_spread)
+            validate_snapshot_pairs(snap, max_pair_spread)
             snapshots.append(snap)
             store.mark_bank_source_result(src["id"], True, "OK")
         except Exception as exc:

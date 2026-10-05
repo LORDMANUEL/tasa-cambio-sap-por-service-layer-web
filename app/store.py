@@ -6,6 +6,7 @@ Layer endpoints and one or more SAP companies.
 """
 from __future__ import annotations
 import sqlite3
+import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -210,13 +211,21 @@ class Store:
         if not company_name.strip(): raise ValueError("Nombre de empresa requerido")
         if not database_name.strip(): raise ValueError("Nombre de base requerido")
         if not sap_user.strip(): raise ValueError("Usuario SAP requerido")
-        if not (use_usd or use_eur): raise ValueError("Seleccione al menos USD o EUR")
         hour=max(0,min(23,int(schedule_hour))); minute=max(0,min(59,int(schedule_minute)))
         now = self.now()
         root = service_layer_root.strip().rstrip('/')
+        if root and (not root.startswith(("http://","https://")) or "/b1s" not in root):
+            raise ValueError("Service Layer inválido: debe usar http(s) e incluir /b1s")
         od = odata_version.strip().lower()
+        if od not in {"","v1","v2"}:
+            raise ValueError("Versión OData inválida")
         codes=",".join(dict.fromkeys(x.strip().upper() for x in bank_source_codes.split(",") if x.strip()))
-        currencies=",".join(dict.fromkeys(x.strip().upper() for x in currencies_csv.split(",") if x.strip())) or ("USD,EUR" if use_eur else "USD")
+        currency_list=list(dict.fromkeys(x.strip().upper() for x in currencies_csv.split(",") if x.strip()))
+        if not currency_list:
+            raise ValueError("Configure al menos una moneda")
+        if any(not re.fullmatch(r"[A-Z]{3}", cur) for cur in currency_list):
+            raise ValueError("Las monedas deben usar códigos de 3 letras, por ejemplo USD, EUR, GTQ, JPY")
+        currencies=",".join(currency_list)
         values=(company_name.strip(),database_name.strip(),dbt,env,int(enabled),int(allow_write),int(scheduled_write),int(auto_enabled),hour,minute,int(use_usd),int(use_eur),sap_user.strip(),primary_bank.upper(),secondary_bank.upper(),root,od,sap_b1_version.strip(),codes,currencies,now)
         with self.conn() as con:
             if company_id:

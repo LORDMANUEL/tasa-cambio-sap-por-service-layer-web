@@ -427,3 +427,29 @@ def test_smtp_test_does_not_claim_success_when_notifications_disabled(monkeypatc
         })
         assert r.status_code==400
         assert 'Active las notificaciones' in r.text
+
+
+def test_company_supports_arbitrary_three_letter_currencies():
+    import app.sync_engine as se
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'currencies.db')
+        cid=add_company(
+            st,
+            use_usd=False,
+            use_eur=False,
+            currencies_csv='JPY,CHF',
+            database_name='SBO_MULTI_CURRENCY',
+        )
+        row=st.get_company(cid)
+        assert row['currencies_csv']=='JPY,CHF'
+        assert se._currencies(row)==['JPY','CHF']
+
+
+def test_company_rejects_invalid_currency_code():
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'currencies.db')
+        try:
+            add_company(st,use_usd=False,use_eur=False,currencies_csv='USDD',database_name='SBO_BAD_CUR')
+            assert False
+        except ValueError as exc:
+            assert 'códigos de 3 letras' in str(exc)
