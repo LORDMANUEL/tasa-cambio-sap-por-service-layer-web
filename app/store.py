@@ -191,6 +191,11 @@ class Store:
             row = con.execute("SELECT * FROM companies WHERE id=?", (company_id,)).fetchone()
             return dict(row) if row else None
 
+    def get_company_by_database(self, database_name: str):
+        with self.conn() as con:
+            row = con.execute("SELECT * FROM companies WHERE database_name=?", (database_name.strip(),)).fetchone()
+            return dict(row) if row else None
+
     def upsert_company(self, *, company_id: int | None, company_name: str, database_name: str, environment: str,
                        enabled: bool, allow_write: bool, scheduled_write: bool, auto_enabled: bool,
                        schedule_hour: int, schedule_minute: int, use_usd: bool, use_eur: bool,

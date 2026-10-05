@@ -24,7 +24,7 @@ from app.dashboard import layout, esc, badge, page_header
 from app.bank_registry import BANKS, automatic_banks
 from app.providers import get_provider
 from app.market_sources import fetch_source, scan_source, MarketSourceError
-from app.sync_engine import inspect_company, write_suggested_manual, run_due_schedules, reconcile_company
+from app.sync_engine import inspect_company, write_suggested_manual, run_due_schedules, reconcile_company, _run_status
 from app.notifications import send_email, send_run_summary, recipients_from_text
 from app.version import get_version
 
@@ -196,19 +196,38 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
                 fetch_source(src,settings); valid_sources.append(src['code'])
             except Exception as exc:
                 source_errors.append(f"{src['code']}: {exc}")
+        valid_sources=list(dict.fromkeys(valid_sources))
         if len(valid_sources)<3:
-            raise ValueError('Se requieren al menos 3 fuentes bancarias válidas. '+(' | '.join(source_errors) if source_errors else 'Configure y pruebe tres fuentes.'))
+            raise ValueError('Se requieren al menos 3 fuentes bancarias válidas e independientes. '+(' | '.join(source_errors) if source_errors else 'Configure y pruebe tres fuentes.'))
+
+        names=form.getlist('company_name'); dbs=form.getlist('database_name'); types=form.getlist('db_type'); envs=form.getlist('environment'); roots=form.getlist('company_service_root'); ods=form.getlist('company_odata'); users=form.getlist('sap_user'); passwords=form.getlist('sap_password')
+        if not names or not dbs: raise ValueError('Agregue al menos una base SAP.')
+        clean_dbs=[str(x).strip() for x in dbs]
+        if any(not x for x in clean_dbs): raise ValueError('Todas las bases deben tener CompanyDB.')
+        if len(set(clean_dbs)) != len(clean_dbs): raise ValueError('No repita la misma CompanyDB en el asistente.')
+        same='same_sap_credentials' in form; shared_user=str(form.get('shared_sap_user','')).strip(); shared_pwd=str(form.get('shared_sap_password',''))
+        if same and (not shared_user or not shared_pwd): raise ValueError('Falta usuario/contraseña SAP común.')
+        if not same:
+            for i,name in enumerate(names):
+                user=(users[i] if i<len(users) else '').strip()
+                pwd=passwords[i] if i<len(passwords) else ''
+                if not user or not pwd: raise ValueError(f'Falta usuario/contraseña SAP para {name or clean_dbs[i]}')
+        sched=str(form.get('schedule_time','06:00'))
+        try:
+            hh,mm=(int(x) for x in sched.split(':',1))
+        except Exception as exc:
+            raise ValueError('Hora de automatización inválida.') from exc
+        if not (0 <= hh <= 23 and 0 <= mm <= 59): raise ValueError('Hora de automatización inválida.')
+        currencies_csv=str(form.get('currencies_csv','USD,EUR')).upper().replace(' ','')
+        timezone=str(form.get('timezone','America/Tegucigalpa')).strip()
+        ZoneInfo(timezone)
+
         for src in temp_sources:
-            sid=store.upsert_bank_source(source_id=None,code=src['code'],name=src['name'],country=src['country'],source_type=src['source_type'],url=src['url'],enabled=True,config_json=src['config_json'],headers_json='{}',timeout_seconds=15,tls_verify=True)
+            existing=store.get_bank_source_by_code(src['code'])
+            sid=store.upsert_bank_source(source_id=existing['id'] if existing else None,code=src['code'],name=src['name'],country=src['country'],source_type=src['source_type'],url=src['url'],enabled=True,config_json=src['config_json'],headers_json='{}',timeout_seconds=15,tls_verify=True)
             if src.get('secret_headers_blob'): store.set_bank_source_secret_headers(sid,src['secret_headers_blob'])
             store.mark_bank_source_result(sid,src['code'] in valid_sources,'OK' if src['code'] in valid_sources else next((x for x in source_errors if x.startswith(src['code']+':')),'ERROR'))
 
-        names=form.getlist('company_name'); dbs=form.getlist('database_name'); types=form.getlist('db_type'); envs=form.getlist('environment'); roots=form.getlist('company_service_root'); ods=form.getlist('company_odata'); users=form.getlist('sap_user'); passwords=form.getlist('sap_password')
-        if not names: raise ValueError('Agregue al menos una base SAP.')
-        same='same_sap_credentials' in form; shared_user=str(form.get('shared_sap_user','')).strip(); shared_pwd=str(form.get('shared_sap_password',''))
-        sched=str(form.get('schedule_time','06:00')); hh,mm=(int(x) for x in sched.split(':',1)); currencies_csv=str(form.get('currencies_csv','USD,EUR')).upper().replace(' ','')
-        timezone=str(form.get('timezone','America/Tegucigalpa')).strip()
-        ZoneInfo(timezone)
         _set_env_value('TIMEZONE',timezone); settings.timezone=timezone; store.timezone=timezone
         store.set_settings({'timezone':timezone})
         use_usd='USD' in currencies_csv.split(','); use_eur='EUR' in currencies_csv.split(',')
@@ -221,7 +240,8 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
             pwd=shared_pwd if same else (passwords[i] if i<len(passwords) else '')
             if not user or not pwd: raise ValueError(f'Falta usuario/contraseña SAP para {name or dbs[i]}')
             env=(envs[i] if i<len(envs) else 'TEST').upper()
-            cid=store.upsert_company(company_id=None,company_name=name,database_name=dbs[i],db_type=types[i] if i<len(types) else 'HANA',environment=env,enabled=True,allow_write=env=='TEST',scheduled_write=True,auto_enabled=True,schedule_hour=hh,schedule_minute=mm,use_usd=use_usd,use_eur=use_eur,sap_user=user,primary_bank=primary,secondary_bank=secondary,service_layer_root=roots[i] if i<len(roots) else '',odata_version=ods[i] if i<len(ods) else '',sap_b1_version=sap_ver,bank_source_codes=all_sources,currencies_csv=currencies_csv)
+            existing_company=store.get_company_by_database(str(dbs[i]).strip())
+            cid=store.upsert_company(company_id=existing_company['id'] if existing_company else None,company_name=name,database_name=dbs[i],db_type=types[i] if i<len(types) else 'HANA',environment=env,enabled=True,allow_write=env=='TEST',scheduled_write=True,auto_enabled=True,schedule_hour=hh,schedule_minute=mm,use_usd=use_usd,use_eur=use_eur,sap_user=user,primary_bank=primary,secondary_bank=secondary,service_layer_root=roots[i] if i<len(roots) else '',odata_version=ods[i] if i<len(ods) else '',sap_b1_version=sap_ver,bank_source_codes=all_sources,currencies_csv=currencies_csv)
             store.set_secret_blob(cid,encrypt_secret(pwd))
         store.set_settings({'setup_complete':'true'})
         r=RedirectResponse('/?welcome=1',303); r.set_cookie(COOKIE,sign_session(admin_user,settings.web_session_secret),httponly=True,samesite='strict',secure=False,max_age=28800); return r
@@ -297,8 +317,13 @@ def companies_page(req:Request, edit:int|None=None):
 @app.post('/companies/save')
 async def company_save(req:Request):
     if not _authed(req): return _redirect_login()
-    f=await req.form(); cid=int(f.get('company_id')) if str(f.get('company_id','')).isdigit() else None; t=str(f.get('schedule_time','06:00')); hh,mm=(int(x) for x in t.split(':',1)); env=str(f.get('environment','TEST')).upper()
+    f=await req.form()
     try:
+        cid=int(f.get('company_id')) if str(f.get('company_id','')).isdigit() else None
+        t=str(f.get('schedule_time','06:00'))
+        hh,mm=(int(x) for x in t.split(':',1))
+        if not (0 <= hh <= 23 and 0 <= mm <= 59): raise ValueError('Hora inválida.')
+        env=str(f.get('environment','TEST')).upper()
         selected=[str(x).upper() for x in f.getlist('bank_sources') if str(x).strip()]
         if len(selected)<3: raise ValueError('Seleccione al menos 3 fuentes bancarias para comparación.')
         primary=str(f.get('primary_bank','')).upper().strip()
@@ -361,7 +386,7 @@ async def prod_toggle(req:Request):
 @app.post('/automation/run/{company_id}')
 def run_one(company_id:int,req:Request):
     if not _authed(req): return _redirect_login()
-    result=reconcile_company(settings,store,company_id,scheduled=True); c=store.get_company(company_id); status='ERROR' if result.get('error') else 'OK'; msg=str(result.get('error') or ', '.join(v.get('status','') for v in result.get('rates',{}).values())); store.mark_run_result(company_id,datetime.now(ZoneInfo(settings.timezone)).date().isoformat(),status,msg); send_run_summary(store,[result]); return RedirectResponse('/automation',303)
+    result=reconcile_company(settings,store,company_id,scheduled=True); c=store.get_company(company_id); status,msg=_run_status(result); store.mark_run_result(company_id,datetime.now(ZoneInfo(settings.timezone)).date().isoformat(),status,msg); send_run_summary(store,[result]); return RedirectResponse('/automation',303)
 
 @app.post('/automation/run-all')
 def run_all(req:Request):
@@ -369,7 +394,7 @@ def run_all(req:Request):
     results=[]; today=datetime.now(ZoneInfo(settings.timezone)).date().isoformat()
     for c in store.list_companies(True):
         if not c.get('auto_enabled'): continue
-        r=reconcile_company(settings,store,c['id'],scheduled=True); results.append(r); status='ERROR' if r.get('error') else 'OK'; msg=str(r.get('error') or ', '.join(v.get('status','') for v in r.get('rates',{}).values())); store.mark_run_result(c['id'],today,status,msg)
+        r=reconcile_company(settings,store,c['id'],scheduled=True); results.append(r); status,msg=_run_status(r); store.mark_run_result(c['id'],today,status,msg)
     send_run_summary(store,results); return RedirectResponse('/',303)
 
 @app.get('/banks',response_class=HTMLResponse)
@@ -389,7 +414,7 @@ def banks(req:Request, edit:int|None=None):
 @app.post('/banks/save')
 async def banks_save(req:Request):
     if not _authed(req): return _redirect_login()
-    f=await req.form(); sid=int(f.get('source_id')) if str(f.get('source_id','')).isdigit() else None
+    f=await req.form(); sid=int(f.get('source_id')) if str(f.get('source_id','')).isdigit() else None; source_id=sid
     try:
         source_id=store.upsert_bank_source(source_id=sid,code=str(f.get('code','')),name=str(f.get('name','')),country=str(f.get('country','')),source_type=str(f.get('source_type','WEB_HTML')),url=str(f.get('url','')),enabled='enabled' in f,config_json=str(f.get('config_json','{}')),headers_json=str(f.get('headers_json','{}')),timeout_seconds=int(f.get('timeout_seconds',15)),tls_verify='tls_verify' in f)
         secret_headers=str(f.get('secret_headers_json','')).strip()
@@ -397,7 +422,7 @@ async def banks_save(req:Request):
             import json as _json; _json.loads(secret_headers); store.set_bank_source_secret_headers(source_id,encrypt_secret(secret_headers))
         src=store.get_bank_source(source_id); fetch_source(src,settings); store.mark_bank_source_result(source_id,True,'OK')
     except Exception as exc:
-        if sid: store.mark_bank_source_result(sid,False,str(exc))
+        if source_id: store.mark_bank_source_result(source_id,False,str(exc))
         return HTMLResponse(_ui('Error de fuente',f"<div class='card error-panel'><h2>No se pudo validar la fuente</h2><p>{esc(exc)}</p><a class='btn' href='/banks'>Volver</a></div>"),400)
     return RedirectResponse('/banks',303)
 
@@ -476,9 +501,62 @@ def settings_page(req:Request):
 @app.post('/settings/general')
 async def settings_general(req:Request, logo:UploadFile|None=File(default=None)):
     if not _authed(req): return _redirect_login()
-    f=await req.form(); root=re.sub(r'/v\d+$','',str(f.get('service_layer_root','')).strip().rstrip('/'),flags=re.I); od=str(f.get('odata_version','v2')).lower(); tz=str(f.get('timezone',settings.timezone)).strip(); ZoneInfo(tz); vals={'organization_name':str(f.get('organization_name','')).strip(),'service_layer_root':root,'odata_version':od,'sap_b1_version':str(f.get('sap_b1_version','')).strip(),'sap_base_url':_endpoint(root,od),'timezone':tz}; _set_env_value('TIMEZONE',tz); settings.timezone=tz; store.timezone=tz
-    if logo and logo.filename: vals['organization_logo']=_save_logo(logo)
-    store.set_settings(vals); return RedirectResponse('/settings',303)
+    f=await req.form()
+    try:
+        root=re.sub(r'/v\d+
+
+async def _save_notification_form(form):
+    vals={'notifications_enabled':'true' if 'notifications_enabled' in form else 'false','smtp_host':str(form.get('smtp_host','')).strip(),'smtp_port':str(form.get('smtp_port','587')).strip(),'smtp_security':str(form.get('smtp_security','STARTTLS')).strip(),'smtp_user':str(form.get('smtp_user','')).strip(),'smtp_from':str(form.get('smtp_from','')).strip(),'notification_recipients':str(form.get('notification_recipients','')).strip()}
+    pwd=str(form.get('smtp_password',''))
+    if pwd: vals['smtp_secret']=encrypt_secret(pwd)
+    store.set_settings(vals)
+
+@app.post('/settings/notifications')
+async def settings_notifications(req:Request):
+    if not _authed(req): return _redirect_login()
+    f=await req.form(); await _save_notification_form(f); return RedirectResponse('/settings',303)
+
+@app.post('/settings/notifications/test',response_class=HTMLResponse)
+async def settings_notifications_test(req:Request):
+    if not _authed(req): return _redirect_login()
+    f=await req.form(); await _save_notification_form(f)
+    try:
+        result=send_email(store,'Prueba Atas',f'Notificación de prueba enviada correctamente desde {_org()}.')
+        if not result.get('sent'): raise ValueError('Active las notificaciones y complete la configuración SMTP antes de probar.')
+    except Exception as exc: return HTMLResponse(_ui('Notificaciones',f"<div class='card error-panel'><h2>No se pudo enviar</h2><p>{esc(exc)}</p><a class='btn' href='/settings'>Volver</a></div>"),400)
+    return HTMLResponse(_ui('Notificaciones',f"<div class='card success-panel'><h2>Correo enviado</h2><p>Destinatarios: {result.get('recipients',0)}</p><a class='btn primary' href='/settings'>Volver</a></div>"))
+
+@app.post('/settings/admin')
+async def settings_admin(req:Request):
+    if not _authed(req): return _redirect_login()
+    f=await req.form(); current=str(f.get('current_password','')); new_user=str(f.get('new_user','')).strip(); new_pwd=str(f.get('new_password',''))
+    if not verify_password(current,settings.web_admin_password_hash): return HTMLResponse(_ui('Configuración',"<div class='card error-panel'><h2>Contraseña actual incorrecta</h2><a class='btn' href='/settings'>Volver</a></div>"),400)
+    if not new_user or len(new_pwd)<6: return HTMLResponse('Datos inválidos',400)
+    h=password_hash(new_pwd); _set_env_value('WEB_ADMIN_USER',new_user); _set_env_value('WEB_ADMIN_PASSWORD_HASH',h); settings.web_admin_user=new_user; settings.web_admin_password_hash=h
+    r=RedirectResponse('/login',303); r.delete_cookie(COOKIE); return r
+
+@app.get('/logs',response_class=HTMLResponse)
+def logs(req:Request):
+    if not _authed(req): return _redirect_login()
+    p=settings.log_path/'sap_fx_service.log'; text='Sin log todavía.'
+    if p.exists(): text=''.join(p.read_text(encoding='utf-8',errors='replace').splitlines(True)[-600:])
+    return HTMLResponse(_ui('Logs',page_header('Logs técnicos','Últimas 600 líneas.')+f"<div class='card'><pre>{esc(text)}</pre></div>"))
+
+@app.get('/health')
+def health(): return {'status':'ok','service':'Atas','version':get_version(),'setup_complete':_setup_complete(),'enabled_companies':len(store.list_companies(True)),'local_only':True}
+,'',str(f.get('service_layer_root','')).strip().rstrip('/'),flags=re.I)
+        od=str(f.get('odata_version','v2')).lower()
+        tz=str(f.get('timezone',settings.timezone)).strip()
+        if not root.startswith(('http://','https://')) or '/b1s' not in root: raise ValueError('URL de Service Layer inválida.')
+        if od not in {'v1','v2'}: raise ValueError('Versión OData inválida.')
+        ZoneInfo(tz)
+        vals={'organization_name':str(f.get('organization_name','')).strip(),'service_layer_root':root,'odata_version':od,'sap_b1_version':str(f.get('sap_b1_version','')).strip(),'sap_base_url':_endpoint(root,od),'timezone':tz}
+        _set_env_value('TIMEZONE',tz); settings.timezone=tz; store.timezone=tz
+        if logo and logo.filename: vals['organization_logo']=_save_logo(logo)
+        store.set_settings(vals)
+    except Exception as exc:
+        return HTMLResponse(_ui('Configuración',f"<div class='card error-panel'><h2>Configuración inválida</h2><p>{esc(exc)}</p><a class='btn' href='/settings'>Volver</a></div>"),400)
+    return RedirectResponse('/settings',303)
 
 async def _save_notification_form(form):
     vals={'notifications_enabled':'true' if 'notifications_enabled' in form else 'false','smtp_host':str(form.get('smtp_host','')).strip(),'smtp_port':str(form.get('smtp_port','587')).strip(),'smtp_security':str(form.get('smtp_security','STARTTLS')).strip(),'smtp_user':str(form.get('smtp_user','')).strip(),'smtp_from':str(form.get('smtp_from','')).strip(),'notification_recipients':str(form.get('notification_recipients','')).strip()}
