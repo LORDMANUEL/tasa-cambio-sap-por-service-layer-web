@@ -1,4 +1,4 @@
-"""Outgoing-only email notifications for SAP FX Control Center V5."""
+"""Outgoing-only email notifications for Atas V5."""
 from __future__ import annotations
 import smtplib, ssl
 from email.message import EmailMessage
