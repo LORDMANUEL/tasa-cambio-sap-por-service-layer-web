@@ -41,6 +41,10 @@ Si la ejecución automática lanza una excepción inesperada:
 - no se generan reintentos automáticos repetidos;
 - el usuario puede revisar el error y ejecutar manualmente si corresponde.
 
+### Auditoría de errores sin duplicados
+
+Cuando una reconciliación ya registró un error técnico, el scheduler reconoce `error_recorded=True` y no inserta una segunda fila para el mismo fallo. Los errores inesperados externos al reconciliador se registran una sola vez desde el scheduler.
+
 ### Branding
 
 El fallback visual del login ahora usa la marca `AT` de Atas.
@@ -50,6 +54,7 @@ El fallback visual del login ahora usa la marca `AT` de Atas.
 - claim diario atómico;
 - segundo claim del mismo día rechazado;
 - dos llamadas al scheduler ejecutan una sola vez;
-- fallo inesperado no se repite el mismo día.
+- fallo inesperado no se repite el mismo día;
+- error ya auditado no se duplica desde el scheduler.
 
 V5.0.1 conserva todos los entregables de V5.0.0: EXE Windows, ZIP Portable, DEB Debian/Ubuntu, GitHub Pages, auditoría, multiempresa, fuentes configurables y Service Layer.
