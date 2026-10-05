@@ -42,6 +42,39 @@ jobs:
           $exclude = @('.git','.github','.venv','dist','build','runtime','.pytest_cache','__pycache__','.env','site')
           Get-ChildItem -Force | Where-Object { $exclude -notcontains $_.Name } | ForEach-Object { Copy-Item $_.FullName -Destination dist/windows-package -Recurse -Force }
           if (Test-Path dist/windows-package/data/tasa_v5.db) { Remove-Item dist/windows-package/data/tasa_v5.db -Force }
+      - name: Build portable ZIP
+        shell: pwsh
+        run: |
+          $portableDir = Join-Path $pwd 'dist/windows-package'
+          $portableZip = Join-Path $pwd 'dist/Atas-V5-Portable-x64.zip'
+          if (Test-Path $portableZip) { Remove-Item $portableZip -Force }
+          Compress-Archive -Path "$portableDir\*" -DestinationPath $portableZip -CompressionLevel Optimal
+          $zip = Get-Item $portableZip
+          $hash = (Get-FileHash $zip.FullName -Algorithm SHA256).Hash.ToLower()
+          $mib = [math]::Round($zip.Length / 1MB, 2)
+          @(
+            "product=Atas"
+            "version=5.0.0"
+            "platform=windows-portable-x64"
+            "file=$($zip.Name)"
+            "bytes=$($zip.Length)"
+            "mib=$mib"
+            "sha256=$hash"
+            "python_embedded=3.13.14"
+            "author=Luis Manuel Fajardo Rivera (LORDMANUEL)"
+            "repository=https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web"
+          ) | Set-Content -Encoding UTF8 dist/BUILD_INFO_PORTABLE.txt
+          Write-Host "ATAS_PORTABLE_ZIP=$($zip.Name)"
+          Write-Host "ATAS_PORTABLE_BYTES=$($zip.Length)"
+          Write-Host "ATAS_PORTABLE_MIB=$mib"
+          Write-Host "ATAS_PORTABLE_SHA256=$hash"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Atas-Windows-Portable-x64
+          path: |
+            dist/Atas-V5-Portable-x64.zip
+            dist/BUILD_INFO_PORTABLE.txt
+          if-no-files-found: error
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup -y --no-progress
