@@ -1,6 +1,7 @@
-#define MyAppName "SAP FX Control Center"
+#define MyAppName "Atas"
 #define MyAppVersion "5.0.0"
-#define MyAppPublisher "SAP FX Control Center Community"
+#define MyAppPublisher "LORDMANUEL"
+#define MyAppURL "https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web"
 #ifndef SourceDir
   #define SourceDir "..\..\dist\windows-package"
 #endif
@@ -12,10 +13,13 @@ AppId={{F85D1C86-B307-4E9B-8F8B-5F27F13CE5C1}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={localappdata}\Programs\SAPFXControlCenter
-DefaultGroupName=SAP FX Control Center
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}
+AppUpdatesURL={#MyAppURL}
+DefaultDirName={localappdata}\Programs\Atas
+DefaultGroupName=Atas
 OutputDir={#OutputDir}
-OutputBaseFilename=SAP-FX-Control-Center-V5-Setup-x64
+OutputBaseFilename=Atas-V5-Setup-x64
 Compression=lzma2/ultra64
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
@@ -25,9 +29,10 @@ WizardStyle=modern
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
-Name: "{group}\SAP FX Control Center"; Filename: "{app}\scripts\windows\start-v5.cmd"; WorkingDir: "{app}"
-Name: "{autodesktop}\SAP FX Control Center"; Filename: "{app}\scripts\windows\start-v5.cmd"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\Atas"; Filename: "{app}\scripts\windows\start-atas.cmd"; WorkingDir: "{app}"
+Name: "{autodesktop}\Atas"; Filename: "{app}\scripts\windows\start-atas.cmd"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\GitHub de LORDMANUEL"; Filename: "https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web"
 [Tasks]
 Name: "desktopicon"; Description: "Crear acceso directo en el escritorio"; GroupDescription: "Accesos directos:"; Flags: unchecked
 [Run]
-Filename: "{app}\scripts\windows\start-v5.cmd"; Description: "Abrir SAP FX Control Center"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\scripts\windows\start-atas.cmd"; Description: "Abrir Atas"; Flags: postinstall nowait skipifsilent
