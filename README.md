@@ -209,3 +209,16 @@ El sitio de presentación se encuentra en `site/`. El workflow `.github/workflow
 Este proyecto se comunica con SAP Business One mediante **Service Layer**. Antes de habilitar producción valide endpoint, versión OData, CompanyDB, permisos del usuario y certificados TLS en su propia infraestructura.
 
 SAP y SAP Business One son marcas de sus respectivos propietarios. Este repositorio no representa una distribución oficial de SAP.
+
+
+## Licencia y responsabilidad
+
+**Atas es software propietario; no es software open source.** Copyright © 2026 Luis Manuel Fajardo Rivera. Todos los derechos reservados.
+
+El acceso al código en GitHub no concede permiso para copiar, redistribuir, sublicenciar, vender, explotar comercialmente ni crear obras derivadas, salvo los derechos mínimos que GitHub otorgue necesariamente para operar su plataforma o una autorización escrita del titular.
+
+El uso autorizado de Atas se realiza bajo los términos de [LICENSE](LICENSE). El software se entrega **sin garantías**, y toda integración con SAP Business One, bancos, APIs o infraestructura del usuario debe validarse en un ambiente de prueba antes de habilitar escritura en producción.
+
+Atas no es un producto de SAP SE ni está afiliado, patrocinado, certificado o respaldado por SAP. SAP y SAP Business One son marcas o marcas registradas de SAP SE o sus afiliadas en Alemania y otros países.
+
+Consulte también [LEGAL.md](LEGAL.md), [SECURITY.md](SECURITY.md) y [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

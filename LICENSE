@@ -1,0 +1,96 @@
+ATAS PERSONAL PROPRIETARY SOFTWARE LICENSE
+Version 1.0 — October 2026
+
+Copyright © 2026 Luis Manuel Fajardo Rivera.
+All rights reserved.
+
+1. OWNERSHIP
+Atas, including its original source code, documentation, user interface, build scripts, packaging, branding, and original project materials ("Software"), is proprietary software owned by Luis Manuel Fajardo Rivera ("Owner"), except for third-party components identified or incorporated under their own licenses.
+
+No ownership interest is transferred by access to this repository, download, installation, evaluation, use, or possession of a copy.
+
+2. NOT OPEN SOURCE
+The Software is not released under an open-source license.
+
+Access to a public GitHub repository does not grant permission to reproduce, distribute, sublicense, sell, commercially exploit, publish outside the rights necessarily granted by GitHub's Terms of Service, or create derivative works from the Software.
+
+Rights necessarily granted by GitHub's Terms of Service for hosting, viewing, and platform-enabled forking remain governed by those Terms and do not create any broader license from the Owner.
+
+3. AUTHORIZED USE
+A person or organization may use an official Atas binary only when the Owner has expressly authorized that use in writing or under a separate commercial, employment, contractor, evaluation, or internal-use agreement.
+
+Unless that authorization expressly says otherwise, any authorization is:
+(a) non-exclusive;
+(b) non-transferable;
+(c) non-sublicensable;
+(d) limited to lawful internal use;
+(e) revocable upon material breach of these terms.
+
+4. PROHIBITED USES
+Without prior written authorization from the Owner, you may not:
+(a) redistribute or republish the Software or substantial portions of it;
+(b) sell, rent, lease, sublicense, host as a service, or commercially exploit it;
+(c) remove or alter copyright, authorship, trademark, or proprietary notices;
+(d) represent the Software as your own work;
+(e) use the Software or its name in a way that implies endorsement by the Owner, SAP SE, a bank, or another third party;
+(f) circumvent technical access or security controls;
+(g) use the Software for unlawful activity.
+
+Nothing in this section restricts a right that applicable law makes non-waivable.
+
+5. THIRD-PARTY COMPONENTS
+Third-party libraries, runtimes, trademarks, APIs, services, and other materials remain subject to their respective owners' terms and licenses. This License applies only to rights the Owner is legally entitled to license.
+
+6. SAP AND THIRD-PARTY SERVICES
+Atas is an independent product. It is not an SAP product and is not affiliated with, sponsored by, certified by, approved by, or endorsed by SAP SE or its affiliates.
+
+SAP and SAP Business One are trademarks or registered trademarks of SAP SE or its affiliates in Germany and other countries.
+
+Banks, exchange-rate providers, APIs, websites, operating systems, Python, GitHub, and other third-party products or services are independent from Atas and may change, fail, block access, return inaccurate data, or impose separate terms.
+
+7. OPERATIONAL AND FINANCIAL RISK
+The Software can read and, when explicitly enabled and authorized, write exchange-rate information to SAP Business One.
+
+The operator is solely responsible for:
+(a) validating configuration and credentials;
+(b) using a non-production environment before production;
+(c) verifying the selected CompanyDB, currency, date, rate source, and rate before enabling writes;
+(d) maintaining backups and recovery procedures;
+(e) ensuring that use complies with accounting, tax, banking, contractual, security, and internal-control requirements;
+(f) deciding whether a bank, API, website, or other rate source is legally and operationally appropriate.
+
+The Software is a technical automation tool and does not provide legal, accounting, tax, investment, banking, or financial advice.
+
+8. NO WARRANTY
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITH ALL FAULTS AND WITHOUT WARRANTIES OF ANY KIND, EXPRESS, IMPLIED, STATUTORY, OR OTHERWISE, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, AVAILABILITY, NON-INFRINGEMENT, SECURITY, OR ERROR-FREE OPERATION.
+
+No statement in documentation, a website, a release note, a test result, or a support communication creates a warranty unless the Owner expressly agrees to one in a signed written agreement.
+
+9. LIMITATION OF LIABILITY
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE OWNER SHALL NOT BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, PUNITIVE, OR CONSEQUENTIAL DAMAGES; LOSS OF PROFITS, REVENUE, DATA, BUSINESS, GOODWILL, OR OPPORTUNITY; SAP OR ERP MISPOSTINGS; INCORRECT EXCHANGE RATES; SERVICE INTERRUPTION; SECURITY INCIDENTS; OR CLAIMS ARISING FROM THIRD-PARTY SERVICES.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE OWNER'S AGGREGATE LIABILITY ARISING OUT OF OR RELATED TO THE SOFTWARE SHALL NOT EXCEED THE AMOUNT ACTUALLY PAID DIRECTLY TO THE OWNER FOR THE SPECIFIC AUTHORIZED COPY OR SERVICE GIVING RISE TO THE CLAIM DURING THE TWELVE MONTHS BEFORE THE EVENT, OR, IF NOTHING WAS PAID, HNL 1,000.
+
+This limitation does not exclude liability that applicable law does not permit to be excluded or limited.
+
+10. USER RESPONSIBILITY AND INDEMNITY
+To the maximum extent permitted by applicable law, an authorized user is responsible for its configuration, credentials, data, infrastructure, production approvals, and instructions given to the Software.
+
+To the maximum extent permitted by applicable law, a user who violates this License or uses the Software unlawfully shall defend and indemnify the Owner against third-party claims arising directly from that violation or unlawful use, except to the extent caused by the Owner's non-excludable legal responsibility.
+
+11. TERMINATION
+Any license granted under these terms terminates automatically upon a material breach that is not cured when legally curable. Upon termination, the user must cease unauthorized use and distribution, subject to rights that applicable law makes non-waivable.
+
+12. GOVERNING LAW
+To the extent permitted by applicable law, this License is governed by the laws of the Republic of Honduras, without regard to conflict-of-law principles. Any mandatory consumer, labor, data-protection, intellectual-property, or other non-waivable law remains applicable where legally required.
+
+13. SEVERABILITY
+If any provision is held unenforceable, it shall be enforced to the maximum extent permitted and the remaining provisions remain in effect.
+
+14. NO WAIVER
+Failure to enforce a provision is not a waiver of that provision or any other right.
+
+15. WRITTEN EXCEPTIONS
+Any permission broader than this License must be granted by the Owner in a written instrument that identifies the Software and the permission granted.
+
+END OF LICENSE
