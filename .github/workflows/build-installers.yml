@@ -3,6 +3,18 @@ name: Build Atas installers
 on:
   push:
     branches: [main]
+    paths:
+      - 'app/**'
+      - 'tests/**'
+      - 'requirements.txt'
+      - 'pytest.ini'
+      - '.env.example'
+      - 'scripts/**'
+      - 'installer/**'
+      - 'packaging/**'
+      - 'ATAS.bat'
+      - 'VERSION.txt'
+      - '.github/workflows/build-installers.yml'
   workflow_dispatch:
 
 permissions:
@@ -24,6 +36,7 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           python -m compileall -q app
+          node --check app/static/app.js
           python -m pytest -q
       - name: Assemble embedded Python package
         shell: pwsh
@@ -191,6 +204,7 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           python -m compileall -q app
+          node --check app/static/app.js
           python -m pytest -q
       - name: Install packaging tools
         run: sudo apt-get update && sudo apt-get install -y rsync dpkg-dev
