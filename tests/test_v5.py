@@ -606,25 +606,21 @@ def test_manual_result_date_does_not_claim_daily_scheduler():
         assert st.claim_daily_run(cid,day) is True
 
 
-def test_scheduler_claim_migration_preserves_existing_last_run_date():
+def test_scheduler_claim_migration_preserves_existing_last_run_date(tmp_path):
     import sqlite3
-    with tempfile.TemporaryDirectory() as d:
-        db=Path(d)/'old.db'
-        # Simulate the relevant V5.0.1 columns before scheduler_claim_date existed.
-        st=Store(db)
-        cid=add_company(st,database_name='MIGRATE_DB')
-        st.mark_run_result(cid,'2026-10-05','OK','old version')
-        con=sqlite3.connect(db)
-        try:
-            rows=con.execute('PRAGMA table_info(companies)').fetchall()
-            # SQLite cannot DROP COLUMN reliably across old deployments; emulate
-            # migration semantics directly by clearing the new field then validating
-            # that an existing claim remains separate after normal operation.
-            con.execute('UPDATE companies SET scheduler_claim_date=last_run_date WHERE id=?',(cid,))
-            con.commit()
-        finally:
-            # Windows keeps the database file locked until sqlite3.Connection.close().
-            # The connection context manager commits/rolls back, but does not close it.
-            con.close()
-        row=st.get_company(cid)
-        assert row['scheduler_claim_date']=='2026-10-05'
+    # Use pytest's managed temp path instead of deleting the SQLite/WAL directory
+    # immediately inside the test. Windows can briefly retain a SQLite file handle
+    # after WAL/checkpoint activity even when every Python connection is closed.
+    db=tmp_path/'old.db'
+    st=Store(db)
+    cid=add_company(st,database_name='MIGRATE_DB')
+    st.mark_run_result(cid,'2026-10-05','OK','old version')
+    con=sqlite3.connect(db)
+    try:
+        con.execute('UPDATE companies SET scheduler_claim_date=last_run_date WHERE id=?',(cid,))
+        con.commit()
+        con.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+    finally:
+        con.close()
+    row=st.get_company(cid)
+    assert row['scheduler_claim_date']=='2026-10-05'
