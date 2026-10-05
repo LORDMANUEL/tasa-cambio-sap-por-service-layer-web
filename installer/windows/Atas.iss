@@ -1,5 +1,8 @@
 #define MyAppName "Atas"
-#define MyAppVersion "5.0.0"
+#ifndef AppVersion
+  #define AppVersion "0.0.0-dev"
+#endif
+#define MyAppVersion AppVersion
 #define MyAppPublisher "Luis Manuel Fajardo Rivera (LORDMANUEL)"
 #define MyAppURL "https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web"
 #ifndef SourceDir
@@ -19,7 +22,7 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={localappdata}\Programs\Atas
 DefaultGroupName=Atas
 OutputDir={#OutputDir}
-OutputBaseFilename=Atas-V5-Setup-x64
+OutputBaseFilename=Atas-V{#MyAppVersion}-Setup-x64
 Compression=lzma2/ultra64
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
