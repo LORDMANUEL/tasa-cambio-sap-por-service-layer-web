@@ -11,7 +11,7 @@ if os.name=='nt':
         buf=ctypes.create_string_buffer(data); return DATA_BLOB(len(data),ctypes.cast(buf,ctypes.POINTER(ctypes.c_byte))),buf
     def encrypt_secret(secret:str)->str:
         src,keep=_blob(secret.encode()); out=DATA_BLOB()
-        if not crypt32.CryptProtectData(ctypes.byref(src),'SAP FX V5',None,None,None,0,ctypes.byref(out)): raise CredentialError('DPAPI no pudo cifrar la credencial')
+        if not crypt32.CryptProtectData(ctypes.byref(src),'Atas V5',None,None,None,0,ctypes.byref(out)): raise CredentialError('DPAPI no pudo cifrar la credencial')
         try:return 'dpapi:'+base64.b64encode(ctypes.string_at(out.pbData,out.cbData)).decode('ascii')
         finally:kernel32.LocalFree(out.pbData)
     def decrypt_secret(blob:str)->str:

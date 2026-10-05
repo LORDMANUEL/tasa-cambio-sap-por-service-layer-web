@@ -487,3 +487,18 @@ def test_inspect_company_reads_sap_even_when_bank_consensus_is_unsafe(monkeypatc
         assert result['rates']['USD']['can_test_write'] is False
         tx=st.list_transactions(10)
         assert any(x['status']=='READ_ONLY_BANK_BLOCKED' for x in tx)
+
+
+def test_secret_filter_keeps_safe_password_status_but_redacts_values():
+    import logging
+    from app.logging_setup import SecretFilter
+    f=SecretFilter()
+    safe=logging.LogRecord('x',logging.INFO,'',0,'SAP_PASSWORD_NOT_CONFIGURED',(),None)
+    assert f.filter(safe)
+    assert safe.getMessage()=='SAP_PASSWORD_NOT_CONFIGURED'
+    secret=logging.LogRecord('x',logging.INFO,'',0,'password=SuperSecret api_key:abc123',(),None)
+    assert f.filter(secret)
+    msg=secret.getMessage()
+    assert 'SuperSecret' not in msg
+    assert 'abc123' not in msg
+    assert 'password=***' in msg

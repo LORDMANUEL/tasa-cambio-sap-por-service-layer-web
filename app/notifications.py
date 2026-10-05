@@ -32,6 +32,6 @@ def send_run_summary(store, results: list[dict]) -> None:
     for r in results:
         lines.append(f"{r.get('company_name') or r.get('company')}: {r.get('error') or 'OK'}")
         for cur,data in (r.get('rates') or {}).items(): lines.append(f"  {cur}: {data.get('status')} | banco {data.get('bank')} | SAP {data.get('after')}")
-    try: send_email(store, f"SAP FX - {'ERRORES' if errors else 'Proceso completado'} - {org}", '\n'.join(lines))
+    try: send_email(store, f"Atas - {'ERRORES' if errors else 'Proceso completado'} - {org}", '\n'.join(lines))
     except Exception:
         import logging; logging.getLogger(__name__).exception('Email notification failed')
