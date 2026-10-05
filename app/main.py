@@ -300,3 +300,104 @@ async def prod_toggle(req:Request):
     f=await req.form(); store.set_settings({'prod_automation_enabled':'true' if str(f.get('enabled'))=='true' else 'false'}); return RedirectResponse('/automation',303)
 
 @app.post('/automation/run/{company_id}')
+def run_one(company_id:int,req:Request):
+    if not _authed(req): return _redirect_login()
+    result=reconcile_company(settings,store,company_id,scheduled=True); c=store.get_company(company_id); status='ERROR' if result.get('error') else 'OK'; msg=str(result.get('error') or ', '.join(v.get('status','') for v in result.get('rates',{}).values())); store.mark_run_result(company_id,datetime.now(ZoneInfo(settings.timezone)).date().isoformat(),status,msg); send_run_summary(store,[result]); return RedirectResponse('/automation',303)
+
+@app.post('/automation/run-all')
+def run_all(req:Request):
+    if not _authed(req): return _redirect_login()
+    results=[]; today=datetime.now(ZoneInfo(settings.timezone)).date().isoformat()
+    for c in store.list_companies(True):
+        if not c.get('auto_enabled'): continue
+        r=reconcile_company(settings,store,c['id'],scheduled=True); results.append(r); status='ERROR' if r.get('error') else 'OK'; msg=str(r.get('error') or ', '.join(v.get('status','') for v in r.get('rates',{}).values())); store.mark_run_result(c['id'],today,status,msg)
+    send_run_summary(store,results); return RedirectResponse('/',303)
+
+@app.get('/banks',response_class=HTMLResponse)
+def banks(req:Request, edit:int|None=None):
+    if not _authed(req): return _redirect_login()
+    sources=store.list_bank_sources(); editing=store.get_bank_source(edit) if edit else None
+    cards=''
+    for src in sources:
+        status=src.get('last_status') or 'SIN PROBAR'
+        cards+=f"""<article class='bank-card source-card'><div class='bank-icon'>{'API' if src['source_type']=='API_JSON' else 'WEB' if src['source_type']=='WEB_HTML' else 'FX'}</div><div class='source-card-main'><div class='section-title'><div><h3>{esc(src['name'])}</h3><small>{esc(src['code'])} · {esc(src['country'] or 'Sin país')} · {esc(src['source_type'])}</small></div>{badge(status)}</div><p>{esc(src['url'] or 'Conector preconfigurado')}</p>{f"<small class='error-text'>{esc(src.get('last_error') or '')}</small>" if src.get('last_error') else ''}<div class='company-actions'><a class='btn secondary' href='/banks?edit={src['id']}#source-editor'>Editar</a><form method='post' action='/banks/{src['id']}/test' data-process='Probando fuente {esc(src['code'])}'><button class='btn secondary'>Probar / escanear</button></form><form method='post' action='/banks/{src['id']}/delete' onsubmit='return confirm(&quot;¿Eliminar esta fuente?&quot;)'><button class='btn danger'>Eliminar</button></form></div></div></article>"""
+    e=editing or {}; st=e.get('source_type','WEB_HTML'); cfg=e.get('config_json') or '{{"mode":"AUTO","currencies":["USD","EUR"]}}'
+    editor=f"""<form id='source-editor' class='card source-editor' method='post' action='/banks/save' data-process='Guardando fuente bancaria'><input type='hidden' name='source_id' value='{e.get('id','')}'><div class='section-title'><div><h2>{'Editar fuente' if editing else 'Agregar banco / fuente'}</h2><p>Conecta una API JSON o una página web pública. El botón Probar valida la extracción antes de usarla en SAP.</p></div><span class='pill'>Mínimo 3 por base</span></div><div class='form-grid cols3'><div><label>Código</label><input name='code' value='{esc(e.get('code',''))}' placeholder='BANCO_X' required></div><div><label>Nombre</label><input name='name' value='{esc(e.get('name',''))}' placeholder='Banco / Fuente' required></div><div><label>País</label><input name='country' value='{esc(e.get('country',''))}' placeholder='Honduras, Guatemala...'></div><div><label>Tipo</label><select name='source_type'><option value='WEB_HTML' {'selected' if st=='WEB_HTML' else ''}>Página web HTML</option><option value='API_JSON' {'selected' if st=='API_JSON' else ''}>API JSON</option><option value='PRESET' {'selected' if st=='PRESET' else ''}>Conector conocido</option></select></div><div class='span2'><label>URL</label><input name='url' value='{esc(e.get('url',''))}' placeholder='https://banco.example/tasas'></div><div class='span3'><label>Configuración JSON</label><textarea name='config_json' rows='8'>{esc(cfg)}</textarea><small>WEB_HTML/API en AUTO detecta monedas y compra/venta. Para precisión avanzada use CSS, REGEX o mapping JSON.</small></div><div class='span3'><label>Headers HTTP JSON no sensibles <span class='optional'>opcional</span></label><textarea name='headers_json' rows='3'>{esc(e.get('headers_json') or '{}')}</textarea></div><div class='span2'><label>Headers secretos / API key JSON <span class='optional'>opcional · cifrado DPAPI</span></label><input type='password' name='secret_headers_json' placeholder='JSON con Authorization/API-Key · vacío conserva'></div><div><label>Timeout (seg)</label><input type='number' name='timeout_seconds' min='3' max='60' value='{e.get('timeout_seconds',15)}'></div></div><div class='check-pills wide'><label><input type='checkbox' name='enabled' {'checked' if e.get('enabled',1) else ''}> Fuente activa</label><label><input type='checkbox' name='tls_verify' {'checked' if e.get('tls_verify',1) else ''}> Validar TLS</label></div><div class='actions'><button class='btn primary'>Guardar fuente</button><button class='btn secondary' formaction='/banks/preview' formmethod='post' data-process='Escaneando fuente bancaria'>Escanear sin guardar</button></div></form>"""
+    guide="""<section class='card source-help'><div class='section-title'><div><h2>Cómo funciona el motor de bancos</h2><p>La empresa puede usar fuentes de cualquier país.</p></div></div><div class='mini-stats'><div><span>1</span><b>Conectar</b><small>API JSON o URL pública</small></div><div><span>2</span><b>Extraer</b><small>AUTO, CSS, Regex o JSON paths</small></div><div><span>3+</span><b>Comparar</b><small>Mediana, desviación y outliers</small></div><div><span>✓</span><b>Aplicar</b><small>La fuente oficial gana sólo si pasa consenso</small></div></div></section>"""
+    body=page_header('Bancos y fuentes','Conecta, escanea y valida fuentes de cambio de cualquier país.',"<form method='post' action='/banks/test-all' data-process='Probando todas las fuentes'><button class='btn primary'>Probar todas</button></form>")+guide+f"<div class='bank-grid'>{cards or '<div class="card empty">No hay fuentes. Agregue al menos tres.</div>'}</div>"+editor
+    return HTMLResponse(_ui('Bancos',body))
+
+@app.post('/banks/save')
+async def banks_save(req:Request):
+    if not _authed(req): return _redirect_login()
+    f=await req.form(); sid=int(f.get('source_id')) if str(f.get('source_id','')).isdigit() else None
+    try:
+        source_id=store.upsert_bank_source(source_id=sid,code=str(f.get('code','')),name=str(f.get('name','')),country=str(f.get('country','')),source_type=str(f.get('source_type','WEB_HTML')),url=str(f.get('url','')),enabled='enabled' in f,config_json=str(f.get('config_json','{}')),headers_json=str(f.get('headers_json','{}')),timeout_seconds=int(f.get('timeout_seconds',15)),tls_verify='tls_verify' in f)
+        secret_headers=str(f.get('secret_headers_json','')).strip()
+        if secret_headers:
+            import json as _json; _json.loads(secret_headers); store.set_bank_source_secret_headers(source_id,encrypt_secret(secret_headers))
+        src=store.get_bank_source(source_id); fetch_source(src,settings); store.mark_bank_source_result(source_id,True,'OK')
+    except Exception as exc:
+        if sid: store.mark_bank_source_result(sid,False,str(exc))
+        return HTMLResponse(_ui('Error de fuente',f"<div class='card error-panel'><h2>No se pudo validar la fuente</h2><p>{esc(exc)}</p><a class='btn' href='/banks'>Volver</a></div>"),400)
+    return RedirectResponse('/banks',303)
+
+@app.post('/banks/preview',response_class=HTMLResponse)
+async def banks_preview(req:Request):
+    if not _authed(req): return _redirect_login()
+    f=await req.form(); src={'code':str(f.get('code','PREVIEW')).upper(),'name':str(f.get('name','Vista previa')),'country':str(f.get('country','')),'source_type':str(f.get('source_type','WEB_HTML')),'url':str(f.get('url','')),'config_json':str(f.get('config_json','{}')),'headers_json':str(f.get('headers_json','{}')),'timeout_seconds':int(f.get('timeout_seconds',15)),'tls_verify':1 if 'tls_verify' in f else 0}
+    if str(f.get('secret_headers_json','')).strip(): src['secret_headers_blob']=encrypt_secret(str(f.get('secret_headers_json')).strip())
+    try:
+        data=scan_source(src,settings); rows=''.join(f"<tr><td>{esc(cur)}</td><td>{esc(v.get('buy'))}</td><td>{esc(v.get('sell'))}</td></tr>" for cur,v in data['rates'].items())
+        body=page_header('Vista previa de fuente',data['name'],"<a class='btn secondary' href='/banks'>Volver</a>")+f"<div class='card'><p><b>URL:</b> {esc(data['source_url'])}</p><table><thead><tr><th>Moneda</th><th>Compra</th><th>Venta</th></tr></thead><tbody>{rows}</tbody></table><p class='success-text'>Extracción correcta. Puede guardar esta configuración.</p></div>"
+        return HTMLResponse(_ui('Vista previa',body))
+    except Exception as exc:
+        return HTMLResponse(_ui('Vista previa',page_header('Escaneo fallido','La fuente respondió, pero no se pudo extraer una tasa válida.',"<a class='btn secondary' href='/banks'>Volver</a>")+f"<div class='card error-panel'><p>{esc(exc)}</p><p>Si la página usa JavaScript dinámico, busque su endpoint API o use selectores/regex estables.</p></div>"),400)
+
+@app.post('/banks/{source_id}/test')
+def banks_test_one(source_id:int,req:Request):
+    if not _authed(req): return _redirect_login()
+    src=store.get_bank_source(source_id)
+    if not src: return HTMLResponse('Fuente no encontrada',404)
+    try: fetch_source(src,settings); store.mark_bank_source_result(source_id,True,'OK')
+    except Exception as exc: store.mark_bank_source_result(source_id,False,str(exc))
+    return RedirectResponse('/banks',303)
+
+@app.post('/banks/test-all')
+def banks_test_all(req:Request):
+    if not _authed(req): return _redirect_login()
+    for src in store.list_bank_sources(enabled_only=True):
+        try: fetch_source(src,settings); store.mark_bank_source_result(src['id'],True,'OK')
+        except Exception as exc: store.mark_bank_source_result(src['id'],False,str(exc))
+    return RedirectResponse('/banks',303)
+
+@app.post('/banks/{source_id}/delete')
+def banks_delete(source_id:int,req:Request):
+    if not _authed(req): return _redirect_login()
+    store.delete_bank_source(source_id); return RedirectResponse('/banks',303)
+
+@app.get('/transactions',response_class=HTMLResponse)
+def transactions(req:Request):
+    if not _authed(req): return _redirect_login()
+    rows=store.list_transactions(500); bodyrows=''.join(f"<tr><td>{esc(x['occurred_at'][:19].replace('T',' '))}</td><td>{esc(x['company_name'] or x['company_db'])}</td><td>{esc(x['currency'])}</td><td>{esc(x['primary_bank'] or '—')}</td><td>{esc(x['sap_before'] or '—')}</td><td>{esc(x['bank_rate'] or '—')}</td><td>{esc(x['sap_after'] or '—')}</td><td>{badge(x['status'])}</td></tr>" for x in rows) or "<tr><td colspan='8' class='empty'>Sin registros.</td></tr>"
+    body=page_header('Transacciones','Historial contable y técnico de lecturas/escrituras.')+f"<div class='card table-wrap'><table><thead><tr><th>Fecha</th><th>Empresa/Base</th><th>Moneda</th><th>Banco</th><th>SAP antes</th><th>Tasa banco</th><th>SAP después</th><th>Estado</th></tr></thead><tbody>{bodyrows}</tbody></table></div>"; return HTMLResponse(_ui('Transacciones',body))
+
+@app.get('/reports',response_class=HTMLResponse)
+def reports(req:Request):
+    if not _authed(req): return _redirect_login()
+    tx=store.list_transactions(5000); total=len(tx); ok=sum(1 for x in tx if x['verified']); err=sum(1 for x in tx if x['status']=='ERROR')
+    body=page_header('Reportes','Exportables para Contabilidad y auditoría.')+f"<div class='kpi-grid'><div class='kpi-card'><div><span>Registros</span><b>{total}</b></div></div><div class='kpi-card'><div><span>Verificados</span><b>{ok}</b></div></div><div class='kpi-card'><div><span>Errores</span><b>{err}</b></div></div></div><div class='card actions'><a class='btn primary' href='/reports/transactions.csv'>Descargar transacciones CSV</a><a class='btn secondary' href='/reports/errors.csv'>Descargar fallos CSV</a></div>"; return HTMLResponse(_ui('Reportes',body))
+
+def _csv(rows,name):
+    buf=io.StringIO(newline='');
+    if rows: w=csv.DictWriter(buf,fieldnames=list(rows[0].keys())); w.writeheader(); w.writerows(rows)
+    return StreamingResponse(iter([buf.getvalue()]),media_type='text/csv; charset=utf-8',headers={'Content-Disposition':f'attachment; filename={name}'})
+@app.get('/reports/transactions.csv')
+def report_tx(req:Request):
+    if not _authed(req): return _redirect_login()
+    return _csv(store.list_transactions(5000),'sap_fx_transacciones.csv')
+@app.get('/reports/errors.csv')
+def report_err(req:Request):
+    if not _authed(req): return _redirect_login()
+    return _csv(store.list_transactions(5000,status='ERROR'),'sap_fx_errores.csv')
+
