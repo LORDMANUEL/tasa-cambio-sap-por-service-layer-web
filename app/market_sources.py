@@ -195,3 +195,127 @@ def _extract_html(html: str, config: dict) -> dict[str, dict[str, Decimal]]:
     mapping = config.get("mapping") or {}
     for cur in currencies:
         spec = mapping.get(cur) or mapping.get(cur.lower()) or {}
+
+        if mode == "CSS":
+            pair = {}
+            for side in ("buy", "sell"):
+                selector = spec.get(side)
+                if not selector:
+                    raise MarketSourceError(f"Falta selector CSS {cur}.{side}")
+                node = soup.select_one(selector)
+                if node is None:
+                    raise MarketSourceError(f"Selector no encontrado: {selector}")
+                pair[side] = _decimal(node.get("content") or node.get_text(" ", strip=True))
+            out[cur] = pair
+        elif mode == "REGEX":
+            pattern = spec.get("regex")
+            if not pattern:
+                raise MarketSourceError(f"Falta regex para {cur}")
+            m = re.search(pattern, text, re.I | re.S)
+            if not m:
+                raise MarketSourceError(f"Regex no encontró {cur}")
+            gd = m.groupdict()
+            if "buy" in gd and "sell" in gd:
+                out[cur] = {"buy": _decimal(gd["buy"]), "sell": _decimal(gd["sell"])}
+            elif len(m.groups()) >= 2:
+                out[cur] = {"buy": _decimal(m.group(1)), "sell": _decimal(m.group(2))}
+            else:
+                raise MarketSourceError("Regex requiere grupos buy/sell o dos grupos posicionales.")
+        else:
+            raise MarketSourceError(f"Modo HTML no soportado: {mode}")
+    return out
+
+
+def _flatten_json(obj: Any, prefix: str = "") -> list[tuple[str, Any]]:
+    out=[]
+    if isinstance(obj, dict):
+        for k,v in obj.items():
+            p=f"{prefix}.{k}" if prefix else str(k)
+            out.extend(_flatten_json(v,p))
+    elif isinstance(obj, list):
+        for i,v in enumerate(obj[:50]):
+            p=f"{prefix}[{i}]"
+            out.extend(_flatten_json(v,p))
+    else:
+        out.append((prefix,obj))
+    return out
+
+def _auto_json(data: Any, currencies: list[str]) -> dict[str, dict[str, Decimal]]:
+    flat=_flatten_json(data)
+    out={}
+    buy_words=('buy','compra','purchase','bid')
+    sell_words=('sell','venta','sale','ask')
+    for cur in currencies:
+        c=cur.lower(); buy=[]; sell=[]
+        for path,val in flat:
+            lp=path.lower()
+            if c not in lp: continue
+            try: num=_decimal(val)
+            except Exception: continue
+            if any(w in lp for w in buy_words): buy.append((path,num))
+            if any(w in lp for w in sell_words): sell.append((path,num))
+        if buy and sell:
+            out[cur]={'buy':buy[0][1],'sell':sell[0][1]}
+    missing=[c for c in currencies if c not in out]
+    if missing: raise MarketSourceError('AUTO JSON no encontró rutas compra/venta para: '+', '.join(missing))
+    return out
+
+def _extract_json(data: Any, config: dict) -> dict[str, dict[str, Decimal]]:
+    mapping = config.get("mapping") or {}
+    currencies = [str(x).upper() for x in config.get("currencies", mapping.keys() or ["USD", "EUR"])]
+    if str(config.get("mode","MAPPING")).upper()=="AUTO":
+        return _auto_json(data,currencies)
+    out: dict[str, dict[str, Decimal]] = {}
+    for cur in currencies:
+        spec = mapping.get(cur) or mapping.get(cur.lower())
+        if not spec:
+            raise MarketSourceError(f"Falta mapping JSON para {cur}")
+        out[cur] = {
+            "buy": _decimal(_json_path(data, spec["buy"])),
+            "sell": _decimal(_json_path(data, spec["sell"])),
+        }
+    return out
+
+
+def fetch_source(source: dict, settings: Settings) -> SourceSnapshot:
+    stype = str(source.get("source_type") or "WEB_HTML").upper()
+    code = str(source.get("code") or source.get("name") or "SOURCE").upper()
+    name = str(source.get("name") or code)
+    if stype == "PRESET":
+        cfg = _normalize_config(source)
+        preset = str(cfg.get("preset") or code).upper()
+        r = get_provider(preset, settings).fetch()
+        rates = {
+            "USD": {"buy": Decimal(str(r.usd.buy)), "sell": Decimal(str(r.usd.sell))},
+            "EUR": {"buy": Decimal(str(r.eur.buy)), "sell": Decimal(str(r.eur.sell))},
+        }
+        return SourceSnapshot(code, name, stype, r.source_url, r.fetched_at.isoformat(), rates, r.raw_hash)
+
+    response = _fetch_http(source, settings)
+    cfg = _normalize_config(source)
+    if stype == "API_JSON":
+        try:
+            data = response.json()
+        except Exception as exc:
+            raise MarketSourceError("La URL no devolvió JSON válido.") from exc
+        rates = _extract_json(data, cfg)
+    elif stype == "WEB_HTML":
+        rates = _extract_html(response.text, cfg)
+    else:
+        raise MarketSourceError(f"Tipo de fuente no soportado: {stype}")
+    return SourceSnapshot(
+        code=code,
+        name=name,
+        source_type=stype,
+        source_url=response.url,
+        fetched_at=datetime.now(ZoneInfo(settings.timezone)).isoformat(),
+        rates=rates,
+        raw_hash=hashlib.sha256(response.content).hexdigest(),
+    )
+
+
+def scan_source(source: dict, settings: Settings) -> dict[str, Any]:
+    """Fetch and return a diagnostic preview without persisting configuration."""
+    snap = fetch_source(source, settings)
+    return snap.serializable()
+
