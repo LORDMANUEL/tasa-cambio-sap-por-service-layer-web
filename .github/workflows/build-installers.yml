@@ -163,7 +163,12 @@ jobs:
 
           $launcher = "$target\scripts\windows\start-atas-background.cmd"
           if (-not (Test-Path $launcher)) { throw "Atas background launcher missing" }
-          Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',('"' + $launcher + '"') -WorkingDirectory $target -Wait
+          $launchProc = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',('"' + $launcher + '"') -WorkingDirectory $target -PassThru
+          if (-not $launchProc.WaitForExit(45000)) {
+            Stop-Process -Id $launchProc.Id -Force -ErrorAction SilentlyContinue
+            throw "Atas background launcher did not exit within 45 seconds"
+          }
+          if ($launchProc.ExitCode -ne 0) { throw "Atas background launcher returned $($launchProc.ExitCode)" }
 
           $ok = $false
           for ($n=0; $n -lt 30; $n++) {
@@ -183,7 +188,12 @@ jobs:
           })
           if ($before.Count -ne 1) { throw "Expected exactly one Atas server after first launch; found $($before.Count)" }
 
-          Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',('"' + $launcher + '"') -WorkingDirectory $target -Wait
+          $launchProc2 = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',('"' + $launcher + '"') -WorkingDirectory $target -PassThru
+          if (-not $launchProc2.WaitForExit(45000)) {
+            Stop-Process -Id $launchProc2.Id -Force -ErrorAction SilentlyContinue
+            throw "Atas background launcher did not exit within 45 seconds"
+          }
+          if ($launchProc2.ExitCode -ne 0) { throw "Atas background launcher returned $($launchProc2.ExitCode)" }
           Start-Sleep -Seconds 2
           $after = @(Get-CimInstance Win32_Process | Where-Object {
             $_.ExecutablePath -eq $atasPython -and $_.CommandLine -match 'app\.run_server'
