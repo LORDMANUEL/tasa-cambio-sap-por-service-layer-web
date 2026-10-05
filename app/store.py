@@ -1,4 +1,4 @@
-"""SQLite persistence for SAP FX Control Center V5.
+"""SQLite persistence for Atas V5.
 
 V5 is intentionally generic: a fresh installation contains no company-specific
 SAP databases. The first-run wizard creates the deployment identity, Service
@@ -222,6 +222,24 @@ class Store:
     def set_secret_blob(self, company_id: int, blob: str) -> None:
         with self.conn() as con:
             con.execute("UPDATE companies SET sap_secret=?, updated_at=? WHERE id=?", (blob,self.now(),company_id))
+
+    def claim_daily_run(self, company_id:int, day:str) -> bool:
+        """Atomically claim a company's automatic run for one local calendar day.
+
+        This closes the race between "is it due?" and "mark it as executed".
+        Even if two scheduler loops reach the same CompanyDB simultaneously,
+        SQLite allows only one UPDATE to change the row for that date.
+        """
+        now=self.now()
+        with self.conn() as con:
+            cur=con.execute(
+                """UPDATE companies
+                   SET last_run_date=?, last_run_at=?, last_run_status='RUNNING',
+                       last_run_message='Ejecución diaria reclamada', updated_at=?
+                   WHERE id=? AND COALESCE(last_run_date,'')<>?""",
+                (day,now,now,company_id,day)
+            )
+            return cur.rowcount==1
 
     def mark_run_result(self, company_id:int, day:str, status:str, message:str='') -> None:
         now=self.now()
