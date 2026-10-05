@@ -56,8 +56,8 @@ jobs:
           $exe = Get-ChildItem dist/installer/*.exe | Select-Object -First 1
           $target = Join-Path $env:RUNNER_TEMP 'AtasSmoke'
           if (Test-Path $target) { Remove-Item $target -Recurse -Force }
-          & $exe.FullName /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR="$target"
-          if ($LASTEXITCODE -ne 0) { throw "Atas installer returned $LASTEXITCODE" }
+          $install = Start-Process -FilePath $exe.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',"/DIR=$target" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Atas installer returned $($install.ExitCode)" }
           if (-not (Test-Path "$target\runtime\python\python.exe")) { throw "Embedded Python missing after install" }
           if (-not (Test-Path "$target\app\main.py")) { throw "Atas application missing after install" }
           $proc = Start-Process -FilePath "$target\runtime\python\python.exe" -ArgumentList '-m','app.run_server' -WorkingDirectory $target -PassThru
