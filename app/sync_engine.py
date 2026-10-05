@@ -1,4 +1,4 @@
-"""SAP/bank orchestration for SAP FX Control Center V5.
+"""SAP/bank orchestration for Atas V5.
 
 Three flows are intentionally separate:
 1. inspect_company(): read-only diagnostic used by the web "Probar" button.
@@ -212,14 +212,25 @@ def record_system_error(store:Store,row:dict,error:str,source:str='scheduler') -
     })
 
 def run_due_schedules(settings:Settings, store:Store) -> list[dict]:
-    """Run each active company at most once per local day after its configured time."""
+    """Run each active company at most once per local day after its configured time.
+
+    The database claim is atomic. It prevents duplicate automatic executions if
+    two scheduler loops overlap or two local server processes start together.
+    Manual "run now" actions intentionally remain separate from this daily lock.
+    """
     now=datetime.now(ZoneInfo(settings.timezone)); today=now.date().isoformat(); out=[]
     for row in store.list_companies(enabled_only=True):
         if not row.get('auto_enabled'): continue
         if row.get('last_run_date')==today: continue
         due=(now.hour,now.minute) >= (int(row.get('schedule_hour') or 0),int(row.get('schedule_minute') or 0))
         if not due: continue
-        result=reconcile_company(settings,store,row['id'],scheduled=True)
+        if not store.claim_daily_run(row['id'],today):
+            continue
+        try:
+            result=reconcile_company(settings,store,row['id'],scheduled=True)
+        except Exception as exc:
+            log.exception('Unexpected scheduler failure company=%s',row['database_name'])
+            result={'company':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'rates':{},'error':str(exc)}
         status,message=_run_status(result)
         store.mark_run_result(row['id'],today,status,message)
         if result.get('error'):
