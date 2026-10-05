@@ -41,7 +41,7 @@ jobs:
         run: |
           $exclude = @('.git','.github','.venv','dist','build','runtime','.pytest_cache','__pycache__','.env','site')
           Get-ChildItem -Force | Where-Object { $exclude -notcontains $_.Name } | ForEach-Object { Copy-Item $_.FullName -Destination dist/windows-package -Recurse -Force }
-          if (Test-Path dist/windows-package/data/tasa_v5.db) { Remove-Item dist/windows-package/data/tasa_v5.db -Force }
+          Get-ChildItem dist/windows-package/data -Filter '*.db' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
       - name: Build portable ZIP
         shell: pwsh
         run: |
@@ -68,6 +68,36 @@ jobs:
           Write-Host "ATAS_PORTABLE_BYTES=$($zip.Length)"
           Write-Host "ATAS_PORTABLE_MIB=$mib"
           Write-Host "ATAS_PORTABLE_SHA256=$hash"
+      - name: Smoke test portable ZIP
+        shell: pwsh
+        run: |
+          $portableZip = Join-Path $pwd 'dist/Atas-V5-Portable-x64.zip'
+          $target = Join-Path $env:RUNNER_TEMP 'AtasPortableSmoke'
+          if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+          Expand-Archive $portableZip -DestinationPath $target -Force
+          if (-not (Test-Path "$target\runtime\python\python.exe")) { throw "Portable embedded Python missing" }
+          if (-not (Test-Path "$target\app\main.py")) { throw "Portable Atas application missing" }
+          $stdout = Join-Path $env:RUNNER_TEMP 'atas-portable-out.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'atas-portable-err.log'
+          $proc = Start-Process -FilePath "$target\runtime\python\python.exe" -ArgumentList '-m','app.run_server' -WorkingDirectory $target -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          try {
+            $ok = $false
+            for ($i=0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $h = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/health' -TimeoutSec 2
+                if ($h.status -eq 'ok' -and $h.service -eq 'Atas') { $ok = $true; break }
+              } catch {}
+            }
+            if (-not $ok) {
+              if (Test-Path $stdout) { Get-Content $stdout }
+              if (Test-Path $stderr) { Get-Content $stderr }
+              throw "Atas portable ZIP did not pass /health smoke test"
+            }
+            Write-Host "ATAS_PORTABLE_SMOKE=OK"
+          } finally {
+            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: Atas-Windows-Portable-x64
@@ -134,7 +164,7 @@ jobs:
             "mib=$mib"
             "sha256=$hash"
             "python_embedded=3.13.14"
-            "author=LORDMANUEL"
+            "author=Luis Manuel Fajardo Rivera (LORDMANUEL)"
             "repository=https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web"
           ) | Set-Content -Encoding UTF8 dist/installer/BUILD_INFO.txt
           if (-not (Test-Path dist/windows-package/runtime/python/python.exe)) { throw "Embedded Python missing" }
@@ -213,7 +243,7 @@ jobs:
             echo "bytes=$BYTES"
             echo "mib=$MIB"
             echo "sha256=$SHA"
-            echo "author=LORDMANUEL"
+            echo "author=Luis Manuel Fajardo Rivera (LORDMANUEL)"
             echo "repository=https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web"
           } > dist/BUILD_INFO_DEBIAN.txt
       - uses: actions/upload-artifact@v4
