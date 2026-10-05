@@ -529,6 +529,7 @@ async def settings_general(req:Request, logo:UploadFile|None=File(default=None))
             'sap_b1_version':str(f.get('sap_b1_version','')).strip(),
             'sap_base_url':_endpoint(root,od),
             'timezone':tz,
+            'sap_verify_tls':'true' if 'sap_verify_tls' in f else 'false',
         }
         _set_env_value('TIMEZONE',tz)
         settings.timezone=tz
