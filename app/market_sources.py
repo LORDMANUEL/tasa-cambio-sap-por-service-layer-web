@@ -420,8 +420,8 @@ def build_consensus(store, settings: Settings, company: dict, currencies: list[s
         official_initial_dev = deviation_by_code.get(primary, Decimal("999"))
         if official_initial_dev > max_dev:
             warnings.append(
-                f"{cur}: fuente oficial {primary} difiere {official_initial_dev:.3f}% del consenso "
-                f"(máx. {max_dev}%)."
+                f"{cur}: fuente oficial difiere {official_initial_dev:.3f}% del consenso "
+                f"({primary}; máx. {max_dev}%)."
             )
 
         if len(inliers) < min_sources:
@@ -451,8 +451,8 @@ def build_consensus(store, settings: Settings, company: dict, currencies: list[s
         )
         if official_clean_dev > max_dev:
             warnings.append(
-                f"{cur}: fuente oficial {primary} difiere {official_clean_dev:.3f}% "
-                f"de la mediana depurada (máx. {max_dev}%)."
+                f"{cur}: fuente oficial difiere {official_clean_dev:.3f}% "
+                f"de la mediana depurada ({primary}; máx. {max_dev}%)."
             )
             continue
 
