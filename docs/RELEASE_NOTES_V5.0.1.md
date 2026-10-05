@@ -45,6 +45,20 @@ Si la ejecución automática lanza una excepción inesperada:
 
 Cuando una reconciliación ya registró un error técnico, el scheduler reconoce `error_recorded=True` y no inserta una segunda fila para el mismo fallo. Los errores inesperados externos al reconciliador se registran una sola vez desde el scheduler.
 
+### Versionado consistente
+
+`VERSION.txt` pasa a ser la única fuente de versión. La misma versión se refleja en:
+
+- endpoint `/health`;
+- pie de página del panel;
+- metadata y nombre del instalador Windows;
+- nombre del ZIP Portable;
+- versión y nombre del paquete Debian;
+- archivos `BUILD_INFO*.txt`;
+- tag/nombre de la Release.
+
+CI incluye pruebas para impedir volver a introducir `5.0.0` hardcodeado en el packaging.
+
 ### Branding
 
 El fallback visual del login ahora usa la marca `AT` de Atas.
