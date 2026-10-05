@@ -502,3 +502,15 @@ def test_secret_filter_keeps_safe_password_status_but_redacts_values():
     assert 'SuperSecret' not in msg
     assert 'abc123' not in msg
     assert 'password=***' in msg
+
+
+def test_debian_packaging_keeps_persistent_data_out_of_opt_payload():
+    from app.config import BASE_DIR
+    build=(BASE_DIR/'scripts/build_deb.sh').read_text(encoding='utf-8')
+    post=(BASE_DIR/'packaging/debian/postinst').read_text(encoding='utf-8')
+    assert "--exclude '/data'" in build
+    assert "--exclude '/logs'" in build
+    assert "--exclude '/app/static/uploads'" in build
+    assert 'migrate_and_link "$APP/data" "$DATA"' in post
+    assert 'migrate_and_link "$APP/logs" "$LOG"' in post
+    assert 'migrate_and_link "$APP/app/static/uploads" "$DATA/uploads"' in post

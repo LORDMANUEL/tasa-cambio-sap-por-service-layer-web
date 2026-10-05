@@ -12,10 +12,27 @@ fi
 
 mkdir -p "$DATA/uploads" "$LOG" "$CONF"
 if [ ! -f "$CONF/app.env" ]; then cp "$APP/.env.example" "$CONF/app.env"; fi
-rm -rf "$APP/data" "$APP/logs" "$APP/app/static/uploads"
-ln -s "$DATA" "$APP/data"
-ln -s "$LOG" "$APP/logs"
-ln -s "$DATA/uploads" "$APP/app/static/uploads"
+
+migrate_and_link() {
+  SRC="$1"
+  DST="$2"
+  mkdir -p "$DST"
+  if [ -L "$SRC" ]; then
+    rm -f "$SRC"
+  elif [ -d "$SRC" ]; then
+    cp -a "$SRC"/. "$DST"/ 2>/dev/null || true
+    rm -rf "$SRC"
+  elif [ -e "$SRC" ]; then
+    rm -f "$SRC"
+  fi
+  ln -s "$DST" "$SRC"
+}
+
+migrate_and_link "$APP/data" "$DATA"
+migrate_and_link "$APP/logs" "$LOG"
+mkdir -p "$APP/app/static"
+migrate_and_link "$APP/app/static/uploads" "$DATA/uploads"
+
 rm -f "$APP/.env"
 ln -s "$CONF/app.env" "$APP/.env"
 

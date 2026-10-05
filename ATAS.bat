@@ -11,6 +11,8 @@ echo  GitHub: https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-we
 echo ================================================================
 if not exist ".prepared_v5" goto prepare
 if not exist ".venv\Scripts\python.exe" goto prepare
+".venv\Scripts\python.exe" -c "import fastapi,uvicorn,requests,bs4,dotenv,pydantic_settings,multipart,cryptography" >nul 2>&1
+if errorlevel 1 goto prepare
 goto start
 :prepare
 echo [INFO] Preparando Atas por primera vez...

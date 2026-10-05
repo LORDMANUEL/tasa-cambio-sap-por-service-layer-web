@@ -14,7 +14,7 @@ sed -i "s/^Version:.*/Version: $VERSION/" "$BUILD/DEBIAN/control"
 cp "$ROOT/packaging/debian/postinst" "$ROOT/packaging/debian/prerm" "$ROOT/packaging/debian/postrm" "$BUILD/DEBIAN/"
 chmod 0755 "$BUILD/DEBIAN/"{postinst,prerm,postrm}
 
-rsync -a --exclude '.git' --exclude '.github' --exclude '.venv' --exclude '.env' --exclude 'dist' --exclude 'build' --exclude 'site' --exclude 'runtime' --exclude '__pycache__' --exclude '.pytest_cache' "$ROOT/" "$BUILD/opt/atas/"
+rsync -a --exclude '.git' --exclude '.github' --exclude '.venv' --exclude '.env' --exclude 'dist' --exclude 'build' --exclude 'site' --exclude 'runtime' --exclude '__pycache__' --exclude '.pytest_cache' --exclude '/data' --exclude '/logs' --exclude '/app/static/uploads' "$ROOT/" "$BUILD/opt/atas/"
 
 cp "$ROOT/packaging/debian/atas.service" "$BUILD/lib/systemd/system/"
 cp "$ROOT/packaging/debian/atas.desktop" "$BUILD/usr/share/applications/"
