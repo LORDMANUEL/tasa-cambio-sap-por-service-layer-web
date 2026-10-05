@@ -1,4 +1,4 @@
-# SAP FX Control Center V5
+# Atas V5
 
 Plataforma web **local-first, multiempresa y multipaís** para controlar la tasa de cambio diaria de SAP Business One mediante Service Layer.
 
@@ -100,7 +100,7 @@ Los binarios se publican como **Artifacts** del workflow:
 ### Windows
 
 ```bat
-TASA_V5.bat
+ATAS.bat
 ```
 
 En la primera ejecución el BAT instala Python 3.13 mediante `winget` si hace falta, crea `.venv`, instala dependencias, ejecuta pruebas y abre:
