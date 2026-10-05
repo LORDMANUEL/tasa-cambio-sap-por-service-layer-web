@@ -110,3 +110,51 @@ def test_full_setup_multi_company_and_navigation(monkeypatch):
         cookie=r.cookies.get(m.COOKIE); headers={'cookie':f'{m.COOKIE}={cookie}'}
         for path in ('/','/companies','/automation','/banks','/transactions','/reports','/settings','/logs','/health'):
             rr=client.get(path,headers=headers,follow_redirects=False); assert rr.status_code==200,(path,rr.status_code)
+
+
+def test_release_has_no_customer_specific_defaults():
+    """The public product must not ship customer-specific endpoints or CompanyDB names."""
+    from app.config import BASE_DIR
+    forbidden=('YUDE','129.80.108.0','TEST_SBO_YUDEMOTORS','SBO_YUDE','Z_TST_YUDE_5')
+    scan_ext={'.py','.md','.txt','.example','.json','.js','.css','.html','.yml','.yaml','.ps1','.bat','.cmd','.sh','.iss','.service','.desktop'}
+    offenders=[]
+    for p in BASE_DIR.rglob('*'):
+        if not p.is_file() or '.git' in p.parts or '.venv' in p.parts or 'dist' in p.parts:
+            continue
+        if p.suffix.lower() not in scan_ext and p.name not in ('.env.example',):
+            continue
+        txt=p.read_text(encoding='utf-8',errors='ignore')
+        for token in forbidden:
+            if token in txt:
+                offenders.append((str(p.relative_to(BASE_DIR)),token))
+    assert not offenders, f'Customer-specific data found: {offenders}'
+
+
+def test_atas_release_identity_and_links():
+    from app.config import BASE_DIR, Settings
+    assert Settings().app_name=='Atas V5'
+    readme=(BASE_DIR/'README.md').read_text(encoding='utf-8')
+    site=(BASE_DIR/'site/index.html').read_text(encoding='utf-8')
+    installer=(BASE_DIR/'installer/windows/Atas.iss').read_text(encoding='utf-8')
+    assert 'Luis Manuel Fajardo Rivera' in readme
+    assert 'https://github.com/LORDMANUEL' in readme
+    assert '<title>Atas V5</title>' in site
+    assert 'Luis Manuel Fajardo Rivera' in site
+    assert '#define MyAppName "Atas"' in installer
+
+
+def test_release_packaging_files_are_present():
+    from app.config import BASE_DIR
+    required=[
+        'ATAS.bat',
+        'scripts/windows/start-atas.cmd',
+        'installer/windows/Atas.iss',
+        'packaging/debian/atas',
+        'packaging/debian/atas.desktop',
+        'packaging/debian/atas.service',
+        'scripts/build_deb.sh',
+        '.github/workflows/build-installers.yml',
+        '.github/workflows/publish-pages.yml',
+        'docs/V4_V5_DIFERENCIAS.md',
+    ]
+    assert all((BASE_DIR/p).exists() for p in required)
