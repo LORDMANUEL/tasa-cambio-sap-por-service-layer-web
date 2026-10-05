@@ -18,11 +18,15 @@ ln -s "$LOG" "$APP/logs"
 ln -s "$DATA/uploads" "$APP/app/static/uploads"
 rm -f "$APP/.env"
 ln -s "$CONF/app.env" "$APP/.env"
+
 python3 -m venv "$APP/.venv"
-"$APP/.venv/bin/python" -m pip install --disable-pip-version-check --no-index --find-links "$APP/vendor/wheels" -r "$APP/requirements.txt"
+"$APP/.venv/bin/python" -m pip install --upgrade pip
+"$APP/.venv/bin/python" -m pip install --disable-pip-version-check -r "$APP/requirements.txt"
+
 chown -R "$USER:$USER" "$DATA" "$LOG"
 chown "$USER:$USER" "$CONF/app.env"
 chmod 600 "$CONF/app.env"
+
 systemctl daemon-reload
 systemctl enable sap-fx-control-center.service >/dev/null 2>&1 || true
 systemctl restart sap-fx-control-center.service || true
