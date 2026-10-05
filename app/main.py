@@ -21,7 +21,6 @@ from app.store import Store
 from app.credential_store import encrypt_secret
 from app.web_auth import COOKIE, sign_session, verify_session, verify_password, password_hash
 from app.dashboard import layout, esc, badge, page_header
-from app.bank_registry import BANKS, automatic_banks
 from app.providers import get_provider
 from app.market_sources import fetch_source, scan_source, validate_snapshot_pairs, MarketSourceError
 from app.sync_engine import inspect_company, write_suggested_manual, run_due_schedules, reconcile_company, _run_status

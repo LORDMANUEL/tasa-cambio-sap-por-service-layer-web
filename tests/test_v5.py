@@ -642,3 +642,15 @@ def test_recover_stale_running_preserves_claim():
         assert row['last_run_status']=='INTERRUPTED'
         assert row['scheduler_claim_date']==day
         assert st.claim_daily_run(cid,day) is False
+
+
+def test_legacy_noop_settings_removed():
+    from app.config import BASE_DIR
+    config=(BASE_DIR/'app/config.py').read_text(encoding='utf-8')
+    env=(BASE_DIR/'.env.example').read_text(encoding='utf-8')
+    main=(BASE_DIR/'app/main.py').read_text(encoding='utf-8')
+    for name in ('app_host','app_api_key','sap_enabled','sap_allow_prod_write'):
+        assert name not in config
+    for name in ('APP_HOST','APP_API_KEY','SAP_ENABLED','SAP_ALLOW_PROD_WRITE'):
+        assert name not in env
+    assert 'from app.bank_registry import BANKS, automatic_banks' not in main

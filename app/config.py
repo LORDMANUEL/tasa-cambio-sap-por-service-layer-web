@@ -12,9 +12,7 @@ class Settings(BaseSettings):
     model_config=SettingsConfigDict(env_file=BASE_DIR/'.env',env_file_encoding='utf-8',extra='ignore')
     app_name:str='Atas V5'
     app_env:str='production'
-    app_host:str='127.0.0.1'
     app_port:int=8787
-    app_api_key:str=''
     web_admin_user:str=''
     web_admin_password_hash:str=''
     web_session_secret:str=''
@@ -30,11 +28,9 @@ class Settings(BaseSettings):
     data_dir:str='data'
     log_dir:str='logs'
     database_file:str='data/atas.db'
-    sap_enabled:bool=True
     sap_base_url:str=''
     sap_verify_tls:bool=False
     sap_timeout_seconds:int=30
-    sap_allow_prod_write:bool=False
 
     @property
     def log_path(self): return (BASE_DIR/self.log_dir).resolve()
