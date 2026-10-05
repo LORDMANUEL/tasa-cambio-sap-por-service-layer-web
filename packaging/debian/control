@@ -3,7 +3,7 @@ Version: 5.0.0
 Section: office
 Priority: optional
 Architecture: amd64
-Maintainer: LORDMANUEL <https://github.com/LORDMANUEL>
+Maintainer: Luis Manuel Fajardo Rivera <43154524+LORDMANUEL@users.noreply.github.com>
 Homepage: https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web
 Depends: python3 (>= 3.11), python3-venv, python3-pip, ca-certificates, xdg-utils
 Description: Atas - SAP Business One exchange-rate automation
