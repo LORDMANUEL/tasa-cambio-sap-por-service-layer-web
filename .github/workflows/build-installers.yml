@@ -151,31 +151,44 @@ jobs:
           if ($install.ExitCode -ne 0) { throw "Atas installer returned $($install.ExitCode)" }
           if (-not (Test-Path "$target\runtime\python\python.exe")) { throw "Embedded Python missing after install" }
           if (-not (Test-Path "$target\app\main.py")) { throw "Atas application missing after install" }
-          $stdout = Join-Path $env:RUNNER_TEMP 'atas-server-out.log'
-          $stderr = Join-Path $env:RUNNER_TEMP 'atas-server-err.log'
-          $proc = Start-Process -FilePath "$target\runtime\python\python.exe" -ArgumentList '-m','app.run_server' -WorkingDirectory $target -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
-          try {
-            $ok = $false
-            for ($i=0; $i -lt 30; $i++) {
-              Start-Sleep -Seconds 1
-              try {
-                $h = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/health' -TimeoutSec 2
-                $setup = Invoke-WebRequest -Uri 'http://127.0.0.1:8787/setup' -UseBasicParsing -TimeoutSec 2
-                $css = Invoke-WebRequest -Uri 'http://127.0.0.1:8787/static/styles.css' -UseBasicParsing -TimeoutSec 2
-                if ($h.status -eq 'ok' -and $h.service -eq 'Atas' -and $setup.StatusCode -eq 200 -and $setup.Content -match 'Configuración inicial' -and $setup.Content -match 'Bases SAP / Multiempresa' -and $css.StatusCode -eq 200 -and $css.Content.Length -gt 5000) { $ok = $true; break }
-              } catch {}
-            }
-            if (-not $ok) {
-            if (Test-Path $stdout) { Get-Content $stdout }
-            if (Test-Path $stderr) { Get-Content $stderr }
-            throw "Installed Atas did not pass /health smoke test"
+          $runKey = Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Atas' -ErrorAction SilentlyContinue
+          if (-not $runKey -or -not $runKey.Atas) { throw "Atas autostart registry entry missing" }
+          Write-Host "ATAS_WINDOWS_AUTOSTART=OK"
+
+          $launcher = "$target\scripts\windows\start-atas-background.cmd"
+          if (-not (Test-Path $launcher)) { throw "Atas background launcher missing" }
+          Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',('"' + $launcher + '"') -WorkingDirectory $target -Wait
+
+          $ok = $false
+          for ($n=0; $n -lt 30; $n++) {
+            Start-Sleep -Seconds 1
+            try {
+              $h = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/health' -TimeoutSec 2
+              $setup = Invoke-WebRequest -Uri 'http://127.0.0.1:8787/setup' -UseBasicParsing -TimeoutSec 2
+              $css = Invoke-WebRequest -Uri 'http://127.0.0.1:8787/static/styles.css' -UseBasicParsing -TimeoutSec 2
+              if ($h.status -eq 'ok' -and $h.service -eq 'Atas' -and $setup.StatusCode -eq 200 -and $setup.Content -match 'Configuración inicial' -and $setup.Content -match 'Bases SAP / Multiempresa' -and $css.StatusCode -eq 200 -and $css.Content.Length -gt 5000) { $ok = $true; break }
+            } catch {}
           }
-            Write-Host "ATAS_WINDOWS_SMOKE=OK"
-            Write-Host "ATAS_WINDOWS_SETUP_WIZARD=OK"
-            Write-Host "ATAS_WINDOWS_STATIC_ASSETS=OK"
-          } finally {
-            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
-          }
+          if (-not $ok) { throw "Installed Atas launcher did not pass web smoke test" }
+
+          $atasPython = (Resolve-Path "$target\runtime\python\python.exe").Path
+          $before = @(Get-CimInstance Win32_Process | Where-Object {
+            $_.ExecutablePath -eq $atasPython -and $_.CommandLine -match 'app\.run_server'
+          })
+          if ($before.Count -ne 1) { throw "Expected exactly one Atas server after first launch; found $($before.Count)" }
+
+          Start-Process -FilePath 'cmd.exe' -ArgumentList '/c',('"' + $launcher + '"') -WorkingDirectory $target -Wait
+          Start-Sleep -Seconds 2
+          $after = @(Get-CimInstance Win32_Process | Where-Object {
+            $_.ExecutablePath -eq $atasPython -and $_.CommandLine -match 'app\.run_server'
+          })
+          if ($after.Count -ne 1) { throw "Atas single-instance guard failed; found $($after.Count) servers" }
+
+          Write-Host "ATAS_WINDOWS_SMOKE=OK"
+          Write-Host "ATAS_WINDOWS_SETUP_WIZARD=OK"
+          Write-Host "ATAS_WINDOWS_STATIC_ASSETS=OK"
+          Write-Host "ATAS_WINDOWS_SINGLE_INSTANCE=OK"
+          $after | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
       - name: Inspect Windows package
         shell: pwsh
         run: |
