@@ -38,7 +38,7 @@ ln -s "$CONF/app.env" "$APP/.env"
 
 python3 -m venv "$APP/.venv"
 "$APP/.venv/bin/python" -m pip install --upgrade pip
-"$APP/.venv/bin/python" -m pip install --disable-pip-version-check -r "$APP/requirements.txt"
+"$APP/.venv/bin/python" -m pip install --disable-pip-version-check -r "$APP/requirements-runtime.txt"
 
 chown -R "$USER:$USER" "$DATA" "$LOG"
 chown "$USER:$USER" "$CONF/app.env"

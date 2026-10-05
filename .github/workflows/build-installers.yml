@@ -57,7 +57,7 @@ jobs:
           Invoke-WebRequest $url -OutFile dist/python-embed.zip
           Expand-Archive dist/python-embed.zip -DestinationPath dist/windows-package/runtime/python -Force
           New-Item -ItemType Directory -Force dist/windows-package/runtime/python/Lib/site-packages | Out-Null
-          python -m pip install --disable-pip-version-check -r requirements.txt --target dist/windows-package/runtime/python/Lib/site-packages
+          python -m pip install --disable-pip-version-check -r requirements-runtime.txt --target dist/windows-package/runtime/python/Lib/site-packages
           $pth = Get-ChildItem dist/windows-package/runtime/python -Filter 'python*._pth' | Select-Object -First 1
           @('python313.zip','.','Lib','Lib\site-packages','..\..','import site') | Set-Content -Encoding ASCII $pth.FullName
       - name: Copy application payload
