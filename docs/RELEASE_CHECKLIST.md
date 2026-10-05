@@ -24,6 +24,9 @@ Una versión se considera publicable solamente cuando se cumplen todos los punto
 - [x] GitHub Pages público y validado.
 - [x] Tamaño y SHA-256 generados por CI.
 - [x] Notas de versión preparadas.
-- [ ] VERSION.txt cambiado a 5.0.0 y Release publicada.
+- [x] VERSION.txt cambiado a 5.0.0 y Release publicada.
 
 La última casilla se completa únicamente después de que el commit candidato pase todos los workflows.
+
+
+Release verificada: https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/releases/tag/v5.0.0

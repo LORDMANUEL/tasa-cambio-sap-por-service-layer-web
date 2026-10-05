@@ -107,6 +107,16 @@ Artifacts esperados:
 - `Atas-Windows-Portable-x64` → `Atas-V5-Portable-x64.zip` + `BUILD_INFO_PORTABLE.txt`.
 - `Atas-Debian-amd64` → `atas_5.0.0_amd64.deb` + `BUILD_INFO_DEBIAN.txt`.
 
+## Binarios V5.0.0 verificados
+
+| Plataforma | Archivo | Tamaño | SHA-256 |
+|---|---|---:|---|
+| Windows Installer x64 | `Atas-V5-Setup-x64.exe` | 21,269,545 B · 20.28 MiB | `348e831ab172c7bc19b0a4d2df5444ad91456567180d0f46cae245c281e44595` |
+| Windows Portable x64 | `Atas-V5-Portable-x64.zip` | 30,530,371 B · 29.12 MiB | `47c6511100e4624d5c3ab3480c6f6860f97aa9e254e4a94b88026109ef6700d5` |
+| Debian/Ubuntu amd64 | `atas_5.0.0_amd64.deb` | 65,660 B · 64.12 KiB | `a4bc40a654bb2dab607166e3a8ea78feecce7fa5c6df6806c060cec97c169a33` |
+
+[Manifiesto completo](docs/RELEASE_MANIFEST_V5.0.0.md)
+
 ## Release estable
 
 La versión publicada se encuentra en:
