@@ -162,9 +162,16 @@ def reconcile_company(settings:Settings, store:Store, company_id:int, *, schedul
     if not row['enabled']: return {'company':row['database_name'],'status':'DISABLED'}
     comparison=_comparison(settings,store,row)
     result={'company':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'bank_safe':comparison.safe,'warnings':comparison.warnings,'rates':{}}
-    if not comparison.safe: return {**result,'error':'BANK_VALIDATION_FAILED'}
-    try: password=_password(row)
-    except CredentialError as exc: return {**result,'error':str(exc)}
+    if not comparison.safe:
+        error='BANK_VALIDATION_FAILED'
+        record_system_error(store,row,error,'bank-validation')
+        return {**result,'error':error,'error_recorded':True}
+    try:
+        password=_password(row)
+    except CredentialError as exc:
+        error=str(exc)
+        record_system_error(store,row,error,'credentials')
+        return {**result,'error':error,'error_recorded':True}
     today=datetime.now(ZoneInfo(settings.timezone)).date(); sap_url=_sap_url(settings,store,row)
     official=_official_rates(comparison); allowed=_scheduled_write_allowed(store,row) if scheduled else (row['environment']=='TEST' and bool(row.get('allow_write')))
     company=SapCompany(row['database_name'],row['environment'],allowed)
@@ -198,10 +205,10 @@ def _run_status(result:dict) -> tuple[str,str]:
     statuses=[str(v.get('status','')) for v in rates.values()]
     if not statuses:
         return 'OK', 'Sin monedas pendientes.'
-    if any('VERIFIED' in x or x=='MATCH' for x in statuses):
-        return 'OK', ', '.join(statuses)
     if any('BLOCKED' in x for x in statuses):
         return 'BLOCKED', ', '.join(statuses)
+    if any('VERIFIED' in x or x=='MATCH' for x in statuses):
+        return 'OK', ', '.join(statuses)
     return 'OK', ', '.join(statuses)
 
 def record_system_error(store:Store,row:dict,error:str,source:str='scheduler') -> None:
