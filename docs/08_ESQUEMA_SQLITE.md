@@ -9,3 +9,14 @@ Tablas:
 - `bank_sources`: APIs/URLs/presets, configuración de extracción y headers cifrados.
 
 No se almacenan passwords SAP/SMTP/API en texto claro.
+
+
+## Archivo local
+
+Las instalaciones nuevas usan:
+
+```text
+data/atas.db
+```
+
+Compatibilidad: si una instalación histórica conserva `data/tasa_v5.db` y su configuración apunta exactamente a ese nombre, Atas migra el archivo a `data/atas.db` al iniciar. Las rutas SQLite personalizadas no se modifican.
