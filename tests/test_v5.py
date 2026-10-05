@@ -208,3 +208,21 @@ def test_daily_scheduler_claim_survives_unexpected_failure(monkeypatch):
         assert second==[]
         row=st.get_company(cid)
         assert row['last_run_status']=='ERROR'
+
+
+def test_scheduler_does_not_duplicate_pre_recorded_error(monkeypatch):
+    import app.sync_engine as se
+    from app.config import Settings
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'scheduler.db')
+        cid=add_company(st,auto_enabled=True,scheduled_write=True,schedule_hour=0,schedule_minute=0)
+        def fake_reconcile(settings,store,company_id,scheduled=True):
+            row=store.get_company(company_id)
+            se.record_system_error(store,row,'already recorded','reconcile')
+            return {'company':row['database_name'],'rates':{},'error':'already recorded','error_recorded':True}
+        monkeypatch.setattr(se,'reconcile_company',fake_reconcile)
+        out=se.run_due_schedules(Settings(),st)
+        assert len(out)==1
+        errors=[x for x in st.list_transactions(20) if x['status']=='ERROR']
+        assert len(errors)==1
+        assert errors[0]['decision']=='RECONCILE'
