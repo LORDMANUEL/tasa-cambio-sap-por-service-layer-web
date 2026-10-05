@@ -226,3 +226,25 @@ def test_scheduler_does_not_duplicate_pre_recorded_error(monkeypatch):
         errors=[x for x in st.list_transactions(20) if x['status']=='ERROR']
         assert len(errors)==1
         assert errors[0]['decision']=='RECONCILE'
+
+
+def test_version_file_is_single_source_of_truth():
+    from app.config import BASE_DIR
+    from app.version import get_version
+    expected=(BASE_DIR/'VERSION.txt').read_text(encoding='utf-8').strip()
+    assert get_version()==expected
+    import app.main as m
+    assert m.health()['version']==expected
+
+
+def test_packaging_versions_are_not_hardcoded_to_500():
+    from app.config import BASE_DIR
+    installer=(BASE_DIR/'installer/windows/Atas.iss').read_text(encoding='utf-8')
+    workflow=(BASE_DIR/'.github/workflows/build-installers.yml').read_text(encoding='utf-8')
+    deb=(BASE_DIR/'scripts/build_deb.sh').read_text(encoding='utf-8')
+    assert '#define MyAppVersion AppVersion' in installer
+    assert 'OutputBaseFilename=Atas-V{#MyAppVersion}-Setup-x64' in installer
+    assert 'VERSION.txt' in workflow
+    assert 'VERSION=5.0.0 ./scripts/build_deb.sh' not in workflow
+    assert 'version=5.0.0' not in workflow
+    assert 'VERSION.txt' in deb
