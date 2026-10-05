@@ -366,7 +366,11 @@ def company_test(company_id:int,req:Request):
     if result.get('bank_error'):
         warning_text='; '.join(result.get('warnings') or ['Las fuentes bancarias no pasaron la validación.'])
         bank_notice=f"<div class='callout info'><b>SAP EN LECTURA: OK · BANCOS: BLOQUEADOS</b><br>{esc(warning_text)}</div>"
-    body=page_header('Prueba SAP',f"{c['company_name']} · {c['database_name']}","<a class='btn secondary' href='/companies'>Volver</a>")+f"<div class='callout info'><b>{gate}</b> · Endpoint: {esc(_effective_company_endpoint(c))}</div>{bank_notice}<div class='rate-grid'>{ratecards}</div>"
+    market_notice=''
+    if result.get('notices'):
+        notice_text='; '.join(result.get('notices') or [])
+        market_notice=f"<div class='callout info'><b>VALIDACIÓN BANCARIA · AVISO</b><br>{esc(notice_text)}</div>"
+    body=page_header('Prueba SAP',f"{c['company_name']} · {c['database_name']}","<a class='btn secondary' href='/companies'>Volver</a>")+f"<div class='callout info'><b>{gate}</b> · Endpoint: {esc(_effective_company_endpoint(c))}</div>{bank_notice}{market_notice}<div class='rate-grid'>{ratecards}</div>"
     return HTMLResponse(_ui('Prueba SAP',body))
 
 @app.post('/companies/{company_id}/write/{currency}')

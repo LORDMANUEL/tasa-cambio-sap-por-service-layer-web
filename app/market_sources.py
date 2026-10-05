@@ -10,7 +10,7 @@ The reconciliation layer requires at least three valid sources before a write.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import hashlib
@@ -61,6 +61,7 @@ class MarketConsensus:
     failed_sources: dict[str, str]
     warnings: list[str]
     snapshots: list[SourceSnapshot]
+    notices: list[str] = field(default_factory=list)
 
 
 def _safe_url(url: str) -> str:
@@ -339,6 +340,17 @@ def validate_snapshot_pairs(snapshot: SourceSnapshot, max_pair_spread_percent: D
 
 
 def build_consensus(store, settings: Settings, company: dict, currencies: list[str]) -> MarketConsensus:
+    """Build a robust multi-source consensus without letting one bad secondary stop accounting.
+
+    Blocking conditions:
+    - fewer than the configured minimum raw/coherent sources;
+    - official source unavailable for a requested currency;
+    - official source is an outlier.
+
+    Non-official outliers are excluded and surfaced as notices when enough
+    coherent sources remain. The value written to SAP is always the official
+    source sell rate; the median is only a plausibility control.
+    """
     runtime_settings = store.get_settings()
     max_pair_spread = Decimal(str(runtime_settings.get("max_pair_spread_percent", "35.0")))
     configured = [x.strip().upper() for x in str(company.get("bank_source_codes") or "").split(",") if x.strip()]
@@ -347,7 +359,10 @@ def build_consensus(store, settings: Settings, company: dict, currencies: list[s
         configured.insert(0, primary)
     configured = list(dict.fromkeys(configured))
     if len(configured) < 3:
-        return MarketConsensus(False, primary, {}, {}, {}, [], {}, ["Configure al menos 3 fuentes bancarias para esta base."], [])
+        return MarketConsensus(
+            False, primary, {}, {}, {}, [], {},
+            ["Configure al menos 3 fuentes bancarias para esta base."], [], []
+        )
 
     sources = {s["code"].upper(): s for s in store.list_bank_sources(enabled_only=True)}
     snapshots: list[SourceSnapshot] = []
@@ -367,37 +382,89 @@ def build_consensus(store, settings: Settings, company: dict, currencies: list[s
             store.mark_bank_source_result(src["id"], False, str(exc))
 
     warnings: list[str] = []
+    notices: list[str] = []
     official_rates: dict[str, Decimal] = {}
     medians: dict[str, Decimal] = {}
     deviations: dict[str, Decimal] = {}
     max_dev = Decimal(str(runtime_settings.get("max_source_deviation_percent", settings.max_bank_spread_percent)))
     min_sources = max(3, int(runtime_settings.get("min_market_sources", "3") or 3))
     by_code = {s.code.upper(): s for s in snapshots}
+
     if primary not in by_code:
         warnings.append(f"La fuente oficial {primary or '(sin definir)'} no respondió correctamente.")
 
-    for cur in currencies:
+    for cur in [c.upper() for c in currencies]:
         values: list[tuple[str, Decimal]] = []
         for snap in snapshots:
-            pair = snap.rates.get(cur.upper())
-            if pair and pair.get("sell"):
-                values.append((snap.code.upper(), pair["sell"]))
+            pair = snap.rates.get(cur)
+            if pair and pair.get("sell") is not None:
+                values.append((snap.code.upper(), Decimal(str(pair["sell"]))))
+
         if len(values) < min_sources:
             warnings.append(f"{cur}: sólo {len(values)} fuentes válidas; se requieren {min_sources}.")
             continue
-        med = Decimal(str(median([v for _, v in values])))
-        medians[cur] = med
-        if primary in by_code and cur in by_code[primary].rates:
-            official = by_code[primary].rates[cur]["sell"]
-            official_rates[cur] = official
-            dev = (abs(official - med) / med * Decimal("100")) if med else Decimal("999")
-            deviations[cur] = dev
-            if dev > max_dev:
-                warnings.append(f"{cur}: fuente oficial difiere {dev:.3f}% del consenso (máx. {max_dev}%).")
-        for code, value in values:
-            dev = (abs(value - med) / med * Decimal("100")) if med else Decimal("999")
-            if dev > max_dev:
-                warnings.append(f"{cur}: {code} es posible outlier ({dev:.3f}% vs mediana).")
+
+        value_by_code = dict(values)
+        if primary not in value_by_code:
+            warnings.append(f"{cur}: la fuente oficial {primary or '(sin definir)'} no publicó una tasa de venta.")
+            continue
+
+        initial_median = Decimal(str(median([value for _, value in values])))
+        deviation_by_code = {
+            code: ((abs(value - initial_median) / initial_median) * Decimal("100")) if initial_median else Decimal("999")
+            for code, value in values
+        }
+        inliers = [(code, value) for code, value in values if deviation_by_code[code] <= max_dev]
+        outliers = [(code, value) for code, value in values if deviation_by_code[code] > max_dev]
+
+        official_initial_dev = deviation_by_code.get(primary, Decimal("999"))
+        if official_initial_dev > max_dev:
+            warnings.append(
+                f"{cur}: fuente oficial {primary} difiere {official_initial_dev:.3f}% del consenso "
+                f"(máx. {max_dev}%)."
+            )
+
+        if len(inliers) < min_sources:
+            warnings.append(
+                f"{cur}: sólo {len(inliers)} fuentes coherentes después de excluir outliers; "
+                f"se requieren {min_sources}."
+            )
+
+        secondary_outliers = [(code, value) for code, value in outliers if code != primary]
+        if secondary_outliers:
+            details = ", ".join(
+                f"{code} ({deviation_by_code[code]:.3f}% vs mediana)"
+                for code, _ in secondary_outliers
+            )
+            notices.append(f"{cur}: fuentes secundarias excluidas por outlier: {details}.")
+
+        # Never make the official rate actionable unless the official source is
+        # coherent and the remaining market set still satisfies the minimum.
+        if official_initial_dev > max_dev or len(inliers) < min_sources:
+            continue
+
+        cleaned_median = Decimal(str(median([value for _, value in inliers])))
+        official = value_by_code[primary]
+        official_clean_dev = (
+            (abs(official - cleaned_median) / cleaned_median) * Decimal("100")
+            if cleaned_median else Decimal("999")
+        )
+        if official_clean_dev > max_dev:
+            warnings.append(
+                f"{cur}: fuente oficial {primary} difiere {official_clean_dev:.3f}% "
+                f"de la mediana depurada (máx. {max_dev}%)."
+            )
+            continue
+
+        medians[cur] = cleaned_median
+        official_rates[cur] = official
+        deviations[cur] = official_clean_dev
+
+    if failed:
+        notices.append(
+            "Fuentes no disponibles o inválidas excluidas: "
+            + ", ".join(f"{code} ({reason})" for code, reason in sorted(failed.items()))
+        )
 
     safe = not warnings and all(cur.upper() in official_rates for cur in currencies)
     return MarketConsensus(
@@ -410,4 +477,6 @@ def build_consensus(store, settings: Settings, company: dict, currencies: list[s
         failed_sources=failed,
         warnings=warnings,
         snapshots=snapshots,
+        notices=notices,
     )
+

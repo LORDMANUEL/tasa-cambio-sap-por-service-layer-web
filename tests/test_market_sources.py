@@ -131,3 +131,42 @@ def test_consensus_rejects_implausible_pair_spread(monkeypatch):
         assert not c.safe
         assert 'C' in c.failed_sources
         assert 'spread compra/venta' in c.failed_sources['C']
+
+
+def test_consensus_excludes_secondary_outlier_when_three_coherent_remain(monkeypatch):
+    import app.market_sources as ms
+    from app.market_sources import SourceSnapshot
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'x.db')
+        st.set_settings({'max_source_deviation_percent':'2.0','min_market_sources':'3'})
+        for code in ('A','B','C','D'):
+            st.upsert_bank_source(source_id=None,code=code,name=code,country='X',source_type='WEB_HTML',url='https://example.com',enabled=True,config_json='{}')
+        vals={'A':Decimal('27.0200'),'B':Decimal('27.0100'),'C':Decimal('27.0300'),'D':Decimal('49.0000')}
+        def fake(src,settings):
+            v=vals[src['code']]
+            return SourceSnapshot(src['code'],src['name'],src['source_type'],src['url'],'2026-10-05T06:00:00-06:00',{'USD':{'buy':v-Decimal('.10'),'sell':v}},'x')
+        monkeypatch.setattr(ms,'fetch_source',fake)
+        c=ms.build_consensus(st,Settings(),{'primary_bank':'A','bank_source_codes':'A,B,C,D'},['USD'])
+        assert c.safe
+        assert c.official_rates['USD']==Decimal('27.0200')
+        assert c.medians['USD']==Decimal('27.0200')
+        assert any('D' in notice and 'outlier' in notice for notice in c.notices)
+        assert c.warnings==[]
+
+
+def test_consensus_blocks_when_outlier_removal_leaves_fewer_than_three(monkeypatch):
+    import app.market_sources as ms
+    from app.market_sources import SourceSnapshot
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'x.db')
+        st.set_settings({'max_source_deviation_percent':'2.0','min_market_sources':'3'})
+        for code in ('A','B','C','D'):
+            st.upsert_bank_source(source_id=None,code=code,name=code,country='X',source_type='WEB_HTML',url='https://example.com',enabled=True,config_json='{}')
+        vals={'A':Decimal('27.0200'),'B':Decimal('27.0100'),'C':Decimal('40.0000'),'D':Decimal('49.0000')}
+        def fake(src,settings):
+            v=vals[src['code']]
+            return SourceSnapshot(src['code'],src['name'],src['source_type'],src['url'],'2026-10-05T06:00:00-06:00',{'USD':{'buy':v-Decimal('.10'),'sell':v}},'x')
+        monkeypatch.setattr(ms,'fetch_source',fake)
+        c=ms.build_consensus(st,Settings(),{'primary_bank':'A','bank_source_codes':'A,B,C,D'},['USD'])
+        assert not c.safe
+        assert any('fuentes coherentes' in warning for warning in c.warnings)

@@ -100,6 +100,7 @@ def inspect_company(settings:Settings, store:Store, company_id:int) -> dict:
         try:
             comparison=_comparison(settings,store,row)
             result['warnings']=comparison.warnings
+            result['notices']=comparison.notices
             result['bank_safe']=comparison.safe
             result['market_sources']=comparison.successful_sources
             result['market_failed']=comparison.failed_sources
@@ -107,6 +108,7 @@ def inspect_company(settings:Settings, store:Store, company_id:int) -> dict:
             log.exception('Bank comparison failed during SAP inspection company=%s',row['database_name'])
             comparison=None
             result['warnings']=[str(exc)]
+            result['notices']=[]
             result['bank_safe']=False
             result['market_sources']=[]
             result['market_failed']={}
@@ -241,7 +243,7 @@ def reconcile_company(settings:Settings, store:Store, company_id:int, *, schedul
     if not row: raise ValueError('Compañía no encontrada')
     if not row['enabled']: return {'company':row['database_name'],'status':'DISABLED'}
     comparison=_comparison(settings,store,row)
-    result={'company':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'bank_safe':comparison.safe,'warnings':comparison.warnings,'rates':{}}
+    result={'company':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'bank_safe':comparison.safe,'warnings':comparison.warnings,'notices':comparison.notices,'rates':{}}
     if not comparison.safe:
         error='BANK_VALIDATION_FAILED'
         record_system_error(store,row,error,'bank-validation')
