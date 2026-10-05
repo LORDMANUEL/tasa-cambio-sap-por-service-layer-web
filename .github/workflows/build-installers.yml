@@ -108,7 +108,9 @@ jobs:
               Start-Sleep -Seconds 1
               try {
                 $h = Invoke-RestMethod -Uri 'http://127.0.0.1:8787/health' -TimeoutSec 2
-                if ($h.status -eq 'ok' -and $h.service -eq 'Atas') { $ok = $true; break }
+                $setup = Invoke-WebRequest -Uri 'http://127.0.0.1:8787/setup' -UseBasicParsing -TimeoutSec 2
+                $css = Invoke-WebRequest -Uri 'http://127.0.0.1:8787/static/styles.css' -UseBasicParsing -TimeoutSec 2
+                if ($h.status -eq 'ok' -and $h.service -eq 'Atas' -and $setup.StatusCode -eq 200 -and $setup.Content -match 'Configuración inicial' -and $setup.Content -match 'Bases SAP / Multiempresa' -and $css.StatusCode -eq 200 -and $css.Content.Length -gt 5000) { $ok = $true; break }
               } catch {}
             }
             if (-not $ok) {
@@ -162,7 +164,7 @@ jobs:
             if (Test-Path $stderr) { Get-Content $stderr }
             throw "Installed Atas did not pass /health smoke test"
           }
-            Write-Host "ATAS_WINDOWS_SMOKE=OK"
+            Write-Host "ATAS_WINDOWS_SMOKE=OK"`n            Write-Host "ATAS_WINDOWS_SETUP_WIZARD=OK"`n            Write-Host "ATAS_WINDOWS_STATIC_ASSETS=OK"
           } finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
           }
@@ -239,7 +241,13 @@ jobs:
           OK=0
           for i in $(seq 1 30); do
             sleep 1
-            if curl -fsS http://127.0.0.1:8787/health | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['status']=='ok' and d['service']=='Atas'" 2>/dev/null; then
+            HEALTH_OK=0
+            SETUP_OK=0
+            CSS_OK=0
+            if curl -fsS http://127.0.0.1:8787/health | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['status']=='ok' and d['service']=='Atas'" 2>/dev/null; then HEALTH_OK=1; fi
+            if curl -fsS http://127.0.0.1:8787/setup | grep -q 'Configuración inicial' && curl -fsS http://127.0.0.1:8787/setup | grep -q 'Bases SAP / Multiempresa'; then SETUP_OK=1; fi
+            if [ "$(curl -fsS http://127.0.0.1:8787/static/styles.css | wc -c)" -gt 5000 ]; then CSS_OK=1; fi
+            if [ "$HEALTH_OK" -eq 1 ] && [ "$SETUP_OK" -eq 1 ] && [ "$CSS_OK" -eq 1 ]; then
               OK=1
               break
             fi
@@ -248,7 +256,7 @@ jobs:
             cat /tmp/atas-smoke.log
             exit 1
           fi
-          echo "ATAS_DEBIAN_SMOKE=OK"
+          echo "ATAS_DEBIAN_SMOKE=OK"`n          echo "ATAS_DEBIAN_SETUP_WIZARD=OK"`n          echo "ATAS_DEBIAN_STATIC_ASSETS=OK"
           kill $PID 2>/dev/null || true
           trap - EXIT
           cd "$GITHUB_WORKSPACE"
