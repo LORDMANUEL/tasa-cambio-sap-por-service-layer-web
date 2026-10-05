@@ -180,3 +180,123 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
         if notification_enabled and str(form.get('smtp_password','')): smtp_secret=encrypt_secret(str(form.get('smtp_password')))
         logo_setting=logo_url or ''
         store.set_settings({'organization_name':org,'organization_logo':logo_setting,'service_layer_root':root,'odata_version':odata,'sap_b1_version':sap_ver,'sap_base_url':_endpoint(root,odata),'setup_complete':'false','prod_automation_enabled':'true' if 'enable_prod_writes' in form else 'false','notifications_enabled':'true' if notification_enabled else 'false','smtp_host':str(form.get('smtp_host','')).strip(),'smtp_port':str(form.get('smtp_port','587')).strip(),'smtp_security':str(form.get('smtp_security','STARTTLS')).strip(),'smtp_user':str(form.get('smtp_user','')).strip(),'smtp_from':str(form.get('smtp_from','')).strip(),'smtp_secret':smtp_secret,'notification_recipients':str(form.get('notification_recipients','')).strip()})
+async def login(req:Request):
+    if not _setup_complete(): return RedirectResponse('/setup',303)
+    f=await req.form(); user=str(f.get('user','')); pwd=str(f.get('password',''))
+    if user!=settings.web_admin_user or not verify_password(pwd,settings.web_admin_password_hash): return HTMLResponse('Credenciales inválidas',401)
+    r=RedirectResponse('/',303); r.set_cookie(COOKIE,sign_session(user,settings.web_session_secret),httponly=True,samesite='strict',secure=False,max_age=28800); return r
+@app.get('/logout')
+def logout(): r=RedirectResponse('/login',303); r.delete_cookie(COOKIE); return r
+
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+@app.get('/',response_class=HTMLResponse)
+def home(req:Request):
+    if not _setup_complete(): return RedirectResponse('/setup',303)
+    if not _authed(req): return _redirect_login()
+    companies=store.list_companies(); active=[x for x in companies if x['enabled']]; tx=store.list_transactions(8); sources=store.list_bank_sources(enabled_only=True); cfg=_cfg()
+    now=datetime.now(ZoneInfo(settings.timezone)); today=now.date().isoformat(); summary=store.transaction_summary(today)
+    latest_ok=next((x for x in tx if x['status']!='ERROR'),None); latest_err=next((x for x in tx if x['status']=='ERROR'),None)
+    next_runs=[]
+    for c in active:
+        if c.get('auto_enabled'): next_runs.append(f"<div class='mini-run'><span>{esc(c['company_name'])}</span><b>{int(c['schedule_hour']):02d}:{int(c['schedule_minute']):02d}</b><small>{'USD ' if c['use_usd'] else ''}{'EUR' if c['use_eur'] else ''}</small></div>")
+    rows=''.join(f"<tr><td>{esc(x['occurred_at'][:19].replace('T',' '))}</td><td>{esc(x['company_db'])}</td><td>{esc(x['currency'])}</td><td>{esc(x['sap_before'] or '—')}</td><td>{esc(x['bank_rate'] or '—')}</td><td>{badge(x['status'])}</td></tr>" for x in tx) or "<tr><td colspan='6' class='empty'>Aún no hay transacciones.</td></tr>"
+    bank_status='En línea' if sources and all((x.get('last_status') in {None,'OK'}) for x in sources) else ('Sin fuentes' if not sources else 'Revisar')
+    body=f"""
+<div class='welcome-strip'><div><div class='eyebrow'>PLATAFORMA CONTABLE</div><h1>Control de Tasas SAP</h1><p>Monitorea, compara y sincroniza la tasa diaria con bancos y SAP Business One.</p></div><form method='post' action='/automation/run-all' data-process='Ejecutando actualización de tasas' data-process-detail='Trayendo datos bancarios, validando, conectando con SAP y verificando resultados.'><button class='btn primary xl'>▶ Ejecutar reconciliación</button></form></div>
+<div class='kpi-grid'><a class='kpi-card' href='/companies'><i>▣</i><div><span>Bases SAP</span><b>{len(active)}</b><small>configuradas y activas</small></div></a><a class='kpi-card' href='/banks'><i>⌂</i><div><span>Fuentes</span><b>{len(sources)}</b><small>{bank_status}</small></div></a><a class='kpi-card' href='/automation'><i>⚙</i><div><span>Automatización</span><b>{sum(1 for c in active if c.get('auto_enabled'))}</b><small>programaciones activas</small></div></a><a class='kpi-card' href='/transactions'><i>▤</i><div><span>Transacciones hoy</span><b>{summary.get('total',0)}</b><small>{summary.get('ERROR',0)} errores</small></div></a></div>
+<div class='dashboard-grid'><section class='card fx-today'><div class='section-title'><div><h2>Estado contable del día</h2><p>Resumen de la última actividad registrada.</p></div>{badge('OPERATIVO' if not latest_err else 'REVISAR')}</div><div class='sync-ring'><div class='ring'><span>✓</span></div><div><h3>{'Todo alineado' if not latest_err else 'Requiere atención'}</h3><p>{'El sistema está listo para la próxima ejecución.' if not latest_err else esc(latest_err.get('error') or 'Hay errores recientes.')}</p></div></div><div class='mini-stats'><div><span>Última ejecución</span><b>{esc((latest_ok or {}).get('occurred_at','—')[:16].replace('T',' '))}</b></div><div><span>Registros hoy</span><b>{summary.get('total',0)}</b></div><div><span>Errores</span><b>{summary.get('ERROR',0)}</b></div></div></section><section class='card schedule-overview'><div class='section-title'><h2>Próximas ejecuciones</h2><a href='/automation'>Configurar →</a></div>{''.join(next_runs) or '<div class="empty">No hay automatizaciones activas.</div>'}</section></div>
+<section class='card'><div class='section-title'><div><h2>Transacciones recientes</h2><p>Lecturas, actualizaciones y verificaciones de SAP.</p></div><a href='/transactions'>Ver todas →</a></div><div class='table-wrap'><table><thead><tr><th>Fecha</th><th>Base</th><th>Moneda</th><th>SAP</th><th>Banco</th><th>Estado</th></tr></thead><tbody>{rows}</tbody></table></div></section>
+"""
+    return HTMLResponse(_ui('Inicio',body))
+
+# ---------------------------------------------------------------------------
+# Companies / credentials / SAP test
+# ---------------------------------------------------------------------------
+def _company_form(c:dict|None=None)->str:
+    c=c or {}; cfg=_cfg(); sources=store.list_bank_sources(enabled_only=True)
+    env=c.get('environment','TEST'); dbt=c.get('db_type','HANA'); od=c.get('odata_version','')
+    selected=set(x.strip().upper() for x in str(c.get('bank_source_codes') or '').split(',') if x.strip())
+    if not selected: selected=set(x['code'].upper() for x in sources[:3])
+    source_checks=''.join(f"<label><input type='checkbox' name='bank_sources' value='{esc(x['code'])}' {'checked' if x['code'].upper() in selected else ''}> {esc(x['name'])} <small>{esc(x['country'])}</small></label>" for x in sources) or "<span class='muted'>Primero configure al menos 3 fuentes en Bancos.</span>"
+    primary_opts=''.join(f"<option value='{esc(x['code'])}' {'selected' if x['code'].upper()==str(c.get('primary_bank') or '').upper() else ''}>{esc(x['name'])}</option>" for x in sources)
+    currencies=esc(c.get('currencies_csv') or ('USD,EUR' if c.get('use_eur',1) else 'USD'))
+    return f"""<form class='card company-editor' method='post' action='/companies/save' data-process='Guardando base SAP'><input type='hidden' name='company_id' value='{c.get('id','')}'><div class='section-title'><h2>{'Editar base' if c else 'Agregar base SAP'}</h2><span class='pill'>Multiempresa</span></div><div class='form-grid cols3'><div><label>Nombre empresa/base</label><input name='company_name' value='{esc(c.get('company_name',''))}' required></div><div><label>Tipo de BD</label><select name='db_type'><option {'selected' if dbt=='HANA' else ''}>HANA</option><option value='SQLSERVER' {'selected' if dbt=='SQLSERVER' else ''}>SQL Server</option></select></div><div><label>CompanyDB</label><input name='database_name' value='{esc(c.get('database_name',''))}' required></div><div><label>Ambiente</label><select name='environment'><option value='TEST' {'selected' if env=='TEST' else ''}>TEST</option><option value='PROD' {'selected' if env=='PROD' else ''}>PROD</option></select></div><div><label>Usuario SAP</label><input name='sap_user' value='{esc(c.get('sap_user',''))}' required></div><div><label>Contraseña SAP</label><input type='password' name='sap_password' placeholder='Dejar vacío para conservar'></div><div class='span2'><label>Service Layer propio <span class='optional'>opcional</span></label><input name='service_layer_root' value='{esc(c.get('service_layer_root',''))}' placeholder='{esc(cfg.get('service_layer_root',''))}'></div><div><label>OData propio</label><select name='odata_version'><option value='' {'selected' if not od else ''}>Predeterminado</option><option value='v2' {'selected' if od=='v2' else ''}>v2</option><option value='v1' {'selected' if od=='v1' else ''}>v1</option></select></div><div><label>Fuente oficial</label><select name='primary_bank' required>{primary_opts}</select></div><div><label>Monedas</label><input name='currencies_csv' value='{currencies}' placeholder='USD,EUR' required></div><div><label>Hora diaria</label><input type='time' name='schedule_time' value='{int(c.get('schedule_hour',6)):02d}:{int(c.get('schedule_minute',0)):02d}'></div></div><div class='source-selector'><div class='section-title'><div><h3>Fuentes de comparación</h3><p>Mínimo 3 fuentes activas; la fuente oficial debe estar incluida.</p></div><a href='/banks' class='btn secondary'>Administrar fuentes</a></div><div class='check-pills wide'>{source_checks}</div></div><div class='check-pills wide'><label><input type='checkbox' name='enabled' {'checked' if c.get('enabled',1) else ''}> Base activa</label><label><input type='checkbox' name='auto_enabled' {'checked' if c.get('auto_enabled',1 if not c else 0) else ''}> Automatización diaria</label><label><input type='checkbox' name='allow_write' {'checked' if c.get('allow_write',env=='TEST') else ''}> Escritura manual TEST</label><label><input type='checkbox' name='scheduled_write' {'checked' if c.get('scheduled_write',0) else ''}> Autorizar escritura automática</label></div><div class='endpoint-preview'><span>Endpoint efectivo</span><code>{esc(_effective_company_endpoint(c) if c else _endpoint(cfg.get('service_layer_root',''),cfg.get('odata_version','v2')))}</code></div><button class='btn primary'>Guardar base</button></form>"""
+
+@app.get('/companies',response_class=HTMLResponse)
+def companies_page(req:Request, edit:int|None=None):
+    if not _authed(req): return _redirect_login()
+    rows=store.list_companies(); cards=''
+    for c in rows:
+        cred='Configurada' if c.get('sap_secret') else 'Falta clave'; ep=_effective_company_endpoint(c)
+        cards+=f"<article class='company-card'><div class='company-card-head'><div><span class='env-tag {c['environment'].lower()}'>{c['environment']}</span><h3>{esc(c['company_name'])}</h3><code>{esc(c['database_name'])}</code></div>{badge(c.get('last_run_status') or 'SIN EJECUCIÓN')}</div><div class='company-meta'><span>BD <b>{esc(c.get('db_type'))}</b></span><span>Usuario <b>{esc(c.get('sap_user'))}</b></span><span>Credencial <b>{cred}</b></span><span>Hora <b>{int(c['schedule_hour']):02d}:{int(c['schedule_minute']):02d}</b></span></div><div class='endpoint-line' title='{esc(ep)}'>{esc(ep)}</div><div class='company-actions'><a class='btn secondary' href='/companies?edit={c['id']}'>Editar</a><a class='btn secondary' href='/companies/{c['id']}/test'>Probar SAP</a><form method='post' action='/companies/{c['id']}/delete' onsubmit='return confirm(&quot;¿Eliminar esta base?&quot;)'><button class='btn danger'>Eliminar</button></form></div></article>"
+    editing=store.get_company(edit) if edit else None
+    body=page_header('Bases SAP','Administra CompanyDB, credenciales, Service Layer por empresa y programación.',"<a class='btn primary' href='/companies#editor'>+ Agregar base</a>")+f"<div class='company-grid'>{cards or '<div class="card empty">No hay bases configuradas.</div>'}</div><div id='editor'>{_company_form(editing)}</div>"
+    return HTMLResponse(_ui('Bases SAP',body))
+
+@app.post('/companies/save')
+async def company_save(req:Request):
+    if not _authed(req): return _redirect_login()
+    f=await req.form(); cid=int(f.get('company_id')) if str(f.get('company_id','')).isdigit() else None; t=str(f.get('schedule_time','06:00')); hh,mm=(int(x) for x in t.split(':',1)); env=str(f.get('environment','TEST')).upper()
+    try:
+        selected=[str(x).upper() for x in f.getlist('bank_sources') if str(x).strip()]
+        if len(selected)<3: raise ValueError('Seleccione al menos 3 fuentes bancarias para comparación.')
+        primary=str(f.get('primary_bank','')).upper().strip()
+        if primary not in selected: raise ValueError('La fuente oficial debe estar incluida entre las fuentes de comparación.')
+        secondary=next((x for x in selected if x!=primary),selected[1])
+        currencies_csv=str(f.get('currencies_csv','USD,EUR')).upper().replace(' ','')
+        use_usd='USD' in currencies_csv.split(','); use_eur='EUR' in currencies_csv.split(',')
+        new_id=store.upsert_company(company_id=cid,company_name=str(f.get('company_name','')),database_name=str(f.get('database_name','')),db_type=str(f.get('db_type','HANA')),environment=env,enabled='enabled' in f,allow_write='allow_write' in f,scheduled_write='scheduled_write' in f,auto_enabled='auto_enabled' in f,schedule_hour=hh,schedule_minute=mm,use_usd=use_usd,use_eur=use_eur,sap_user=str(f.get('sap_user','')),primary_bank=primary,secondary_bank=secondary,service_layer_root=str(f.get('service_layer_root','')),odata_version=str(f.get('odata_version','')),sap_b1_version=_cfg().get('sap_b1_version','10.0'),bank_source_codes=','.join(selected),currencies_csv=currencies_csv)
+        pwd=str(f.get('sap_password',''))
+        if pwd: store.set_secret_blob(new_id,encrypt_secret(pwd))
+    except Exception as exc: return HTMLResponse(_ui('Error',f"<div class='card error-panel'><h2>No se pudo guardar</h2><p>{esc(exc)}</p><a class='btn' href='/companies'>Volver</a></div>"),400)
+    return RedirectResponse('/companies',303)
+
+@app.post('/companies/{company_id}/delete')
+def company_delete(company_id:int,req:Request):
+    if not _authed(req): return _redirect_login()
+    store.delete_company(company_id); return RedirectResponse('/companies',303)
+
+@app.get('/companies/{company_id}/test',response_class=HTMLResponse)
+def company_test(company_id:int,req:Request):
+    if not _authed(req): return _redirect_login()
+    c=store.get_company(company_id)
+    if not c: return HTMLResponse('No encontrada',404)
+    result=inspect_company(settings,store,company_id)
+    if result.get('error'): return HTMLResponse(_ui('Prueba SAP',page_header('Prueba SAP',c['company_name'])+f"<div class='card error-panel'><h2>No se pudo completar</h2><p>{esc(result['error'])}</p><a class='btn' href='/companies'>Volver</a></div>"))
+    ratecards=''
+    for cur,data in result.get('rates',{}).items():
+        can_write=data.get('can_test_write') or data.get('can_prod_write'); action=''
+        if can_write and not data.get('matches'):
+            action=f"<form method='post' action='/companies/{company_id}/write/{cur}' data-process='Aplicando tasa {cur} en SAP' data-process-detail='Validando banco, escribiendo en SAP y verificando la lectura posterior.'><button class='btn primary'>Aplicar tasa bancaria ahora</button></form>"
+        ratecards+=f"<div class='rate-card'><div class='section-title'><h2>{cur}</h2>{badge('COINCIDE' if data['matches'] else 'SIN TASA' if data['missing'] else 'DIFERENCIA')}</div><div class='rate-values'><div><span>SAP hoy</span><b>{esc(data['sap'])}</b></div><div><span>Banco oficial</span><b>{esc(data['bank'])}</b></div></div><p>{'La tasa ya coincide.' if data['matches'] else 'Se sugiere la tasa del banco oficial.'}</p>{action}</div>"
+    gate='PRODUCCIÓN HABILITADA' if any(d.get('can_prod_write') for d in result.get('rates',{}).values()) else ('PRODUCCIÓN · SOLO LECTURA' if c['environment']=='PROD' else 'BASE DE PRUEBA')
+    body=page_header('Prueba SAP',f"{c['company_name']} · {c['database_name']}","<a class='btn secondary' href='/companies'>Volver</a>")+f"<div class='callout info'><b>{gate}</b> · Endpoint: {esc(_effective_company_endpoint(c))}</div><div class='rate-grid'>{ratecards}</div>"
+    return HTMLResponse(_ui('Prueba SAP',body))
+
+@app.post('/companies/{company_id}/write/{currency}')
+def company_write(company_id:int,currency:str,req:Request):
+    if not _authed(req): return _redirect_login()
+    try: write_suggested_manual(settings,store,company_id,currency)
+    except Exception as exc: return HTMLResponse(_ui('Error',f"<div class='card error-panel'><h2>Error de escritura</h2><p>{esc(exc)}</p></div>"),400)
+    return RedirectResponse(f'/companies/{company_id}/test',303)
+
+# ---------------------------------------------------------------------------
+# Automation / banks / transactions / reports
+# ---------------------------------------------------------------------------
+@app.get('/automation',response_class=HTMLResponse)
+def automation(req:Request):
+    if not _authed(req): return _redirect_login()
+    cfg=_cfg(); prod=cfg.get('prod_automation_enabled','false').lower()=='true'; cards=''
+    for c in store.list_companies(True):
+        cards+=f"<article class='automation-card'><div><span class='env-tag {c['environment'].lower()}'>{c['environment']}</span><h3>{esc(c['company_name'])}</h3><code>{esc(c['database_name'])}</code></div><div class='automation-time'><span>Diario</span><b>{int(c['schedule_hour']):02d}:{int(c['schedule_minute']):02d}</b><small>{'USD ' if c['use_usd'] else ''}{'EUR' if c['use_eur'] else ''}</small></div><div class='automation-status'><span>Última ejecución</span><b>{esc((c.get('last_run_at') or '—')[:19].replace('T',' '))}</b>{badge(c.get('last_run_status') or 'PENDIENTE')}</div><form method='post' action='/automation/run/{c['id']}' data-process='Ejecutando {esc(c['company_name'])}' data-process-detail='Banco → validación → SAP → comparación → escritura → verificación → auditoría.'><button class='btn primary'>▶ Ejecutar ahora</button></form></article>"
+    body=page_header('Automatización','Una ejecución diaria por base, con auditoría y verificación.')+f"<div class='prod-control card'><div><div class='eyebrow'>ESCRITURA PRODUCTIVA</div><h2>{'PROD habilitado' if prod else 'PROD bloqueado'}</h2><p>{'Las bases PROD autorizadas pueden escribir.' if prod else 'Las bases PROD permanecen en lectura.'}</p></div><form method='post' action='/automation/prod-toggle'><input type='hidden' name='enabled' value='{'false' if prod else 'true'}'><button class='btn {'danger' if prod else 'primary'}'>{'Bloquear PROD' if prod else 'Habilitar PROD'}</button></form></div><div class='automation-list'>{cards or '<div class="card empty">No hay bases activas.</div>'}</div>"
+    return HTMLResponse(_ui('Automatización',body))
+
+@app.post('/automation/prod-toggle')
+async def prod_toggle(req:Request):
+    if not _authed(req): return _redirect_login()
+    f=await req.form(); store.set_settings({'prod_automation_enabled':'true' if str(f.get('enabled'))=='true' else 'false'}); return RedirectResponse('/automation',303)
+
+@app.post('/automation/run/{company_id}')
