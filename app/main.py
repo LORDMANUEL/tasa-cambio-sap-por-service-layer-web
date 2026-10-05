@@ -26,6 +26,7 @@ from app.providers import get_provider
 from app.market_sources import fetch_source, scan_source, MarketSourceError
 from app.sync_engine import inspect_company, write_suggested_manual, run_due_schedules, reconcile_company
 from app.notifications import send_email, send_run_summary, recipients_from_text
+from app.version import get_version
 
 settings=get_settings(); configure_logging(settings); log=logging.getLogger(__name__)
 store=Store(settings.db_path,settings.timezone)
@@ -515,4 +516,4 @@ def logs(req:Request):
     return HTMLResponse(_ui('Logs',page_header('Logs técnicos','Últimas 600 líneas.')+f"<div class='card'><pre>{esc(text)}</pre></div>"))
 
 @app.get('/health')
-def health(): return {'status':'ok','service':'Atas','version':'5.0.0','setup_complete':_setup_complete(),'enabled_companies':len(store.list_companies(True)),'local_only':True}
+def health(): return {'status':'ok','service':'Atas','version':get_version(),'setup_complete':_setup_complete(),'enabled_companies':len(store.list_companies(True)),'local_only':True}
