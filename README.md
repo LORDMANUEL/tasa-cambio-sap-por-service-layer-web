@@ -1,5 +1,8 @@
 # Atas V5
 
+**Autor:** [LORDMANUEL](https://github.com/LORDMANUEL) · **Repositorio:** [tasa-cambio-sap-por-service-layer-web](https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web)
+
+
 Plataforma web **local-first, multiempresa y multipaís** para controlar la tasa de cambio diaria de SAP Business One mediante Service Layer.
 
 El proyecto consulta fuentes bancarias o APIs, exige un consenso mínimo, compara la tasa existente en SAP, aplica cambios autorizados y conserva trazabilidad de cada ejecución.
@@ -93,7 +96,12 @@ El `.deb`:
 
 Los binarios se publican como **Artifacts** del workflow:
 
-**Actions → Build installers**
+**Actions → Build Atas installers**
+
+Artifacts esperados:
+
+- `Atas-Windows-x64` → `Atas-V5-Setup-x64.exe` + `BUILD_INFO.txt`.
+- `Atas-Debian-amd64` → `atas_5.0.0_amd64.deb` + `BUILD_INFO_DEBIAN.txt`.
 
 ## Ejecución desde código fuente
 
@@ -157,6 +165,7 @@ docs/                   Documentación técnica y operativa
 - [Instalación Windows](docs/INSTALL_WINDOWS.md)
 - [Instalación Debian/Ubuntu](docs/INSTALL_DEBIAN.md)
 - [Distribución por GitHub](docs/GITHUB_DISTRIBUTION.md)
+- [Diferencias verificadas V4.3.4 → Atas V5](docs/V4_V5_DIFERENCIAS.md)
 
 ## Pruebas
 
@@ -169,7 +178,7 @@ CI ejecuta la suite en Windows y Ubuntu.
 
 ## GitHub Pages
 
-El sitio de presentación se encuentra en `site/` y se publica mediante `.github/workflows/pages.yml`.
+El sitio de presentación se encuentra en `site/` y se publica mediante `.github/workflows/pages.yml`. URL prevista: `https://lordmanuel.github.io/tasa-cambio-sap-por-service-layer-web/`.
 
 ## Nota sobre SAP
 
