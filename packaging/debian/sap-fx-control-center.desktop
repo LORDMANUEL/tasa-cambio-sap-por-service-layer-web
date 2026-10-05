@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=SAP FX Control Center
-Comment=Panel local de tasa de cambio para SAP Business One
-Exec=xdg-open http://127.0.0.1:8787/
+Name=Atas
+Comment=Automatización local de tasa de cambio para SAP Business One
+Exec=atas
 Terminal=false
 Categories=Office;Finance;
