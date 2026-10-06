@@ -4,7 +4,7 @@ Validación ejecutada sobre el paquete final.
 
 ## Suite automática
 
-- `pytest`: **53 passed**
+- `pytest`: **77 passed**
 - `compileall app`: OK
 - `node --check app/static/app.js`: OK
 
@@ -47,3 +47,19 @@ Validación ejecutada sobre el paquete final.
 ## Limitación intencional
 
 Las pruebas no escriben contra un SAP de producción ni dependen de sitios externos. Las conexiones reales se validan desde los botones `Probar SAP` y `Probar / escanear` en la instalación del cliente.
+
+
+## Validación de desarrollo V5.0.4-dev — build #192
+
+- Windows: 77 pruebas aprobadas.
+- Debian/Ubuntu: 77 pruebas aprobadas.
+- Windows Portable: arranque y `/health` aprobados.
+- Windows Installer: instalación, arranque, wizard, assets y single-instance aprobados.
+- Debian/Ubuntu: instalación, servicio/aplicación, wizard y assets aprobados.
+- Reintento de tasa bancaria repetida: cubierto por pruebas.
+- Persistencia de tasa del día anterior: cubierta por pruebas.
+- Migración de campos de reintento: cubierta por pruebas.
+- Estado `WAITING_BANK_UPDATE`: cubierto por pruebas.
+- Límite de reintentos y transición a `ATTENTION`: cubierto por pruebas.
+
+La validación automática no sustituye una aceptación real contra SAP Business One TEST ni valida disponibilidad futura de sitios bancarios externos.

@@ -119,13 +119,15 @@ Artifacts esperados:
 
 ## Release estable
 
-**Atas V5.0.3** quedó validada en Windows y Debian/Ubuntu con **53 pruebas automáticas por plataforma**, smoke tests del producto instalado y verificación del wizard/recursos web.
+**Atas V5.0.3** quedó validada en Windows y Debian/Ubuntu con **77 pruebas automáticas por plataforma**, smoke tests del producto instalado y verificación del wizard/recursos web.
 
 La versión publicada se encuentra en:
 
 **https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/releases/latest**
 
 La Release adjunta los binarios de Windows y Debian junto con sus archivos de tamaño/SHA-256.
+
+> Estado de desarrollo: `main` está en **5.0.4-dev**. El build #192 validó 77 pruebas por plataforma, EXE, Portable y DEB. La release pública estable y GitHub Pages continúan apuntando a **V5.0.3** hasta cerrar la aceptación funcional de V5.0.4.
 
 ## Ejecución desde código fuente
 
