@@ -1,6 +1,6 @@
 from pathlib import Path
 from decimal import Decimal
-from datetime import date
+from datetime import date, timedelta
 import tempfile
 import requests
 from app.store import Store
@@ -700,3 +700,144 @@ def test_reconcile_match_never_writes_same_rate_again(monkeypatch):
 
         assert result['rates']['USD']['status']=='MATCH'
         assert FakeSap.writes==[]
+
+
+def test_scheduled_reconcile_waits_when_official_rate_equals_previous_day(monkeypatch):
+    import app.sync_engine as se
+    from app.config import Settings
+    from app.credential_store import encrypt_secret
+    from types import SimpleNamespace
+
+    class FailIfSapUsed:
+        def __init__(self,*args,**kwargs):
+            raise AssertionError('SAP must not be opened while every currency waits for bank refresh')
+
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'previous-rate.db')
+        cid=add_company(
+            st,
+            currencies_csv='USD',
+            use_usd=True,
+            use_eur=False,
+            bank_source_codes='A,B,C',
+            primary_bank='A',
+        )
+        st.set_secret_blob(cid, encrypt_secret('pw'))
+        today=se._local_day(Settings())
+        yesterday=(today-timedelta(days=1)).isoformat()
+        st.record_market_snapshot(
+            observed_day=yesterday,
+            fetched_at=yesterday+'T06:00:00-06:00',
+            source_code='A',
+            source_name='A',
+            source_url='https://example.com',
+            rates={'USD':{'buy':Decimal('26.90'),'sell':Decimal('27.0200')}},
+            raw_hash='old',
+        )
+        fake=SimpleNamespace(
+            safe=True,warnings=[],notices=[],
+            successful_sources=['A','B','C'],failed_sources={},
+            official_rates={'USD':Decimal('27.0200')},
+        )
+        monkeypatch.setattr(se,'_comparison',lambda settings,store,row:fake)
+        monkeypatch.setattr(se,'SapFxClient',FailIfSapUsed)
+
+        result=se.reconcile_company(Settings(),st,cid,scheduled=True)
+
+        assert result['retry_required'] is True
+        assert result['retry_after_minutes']==60
+        assert result['rates']['USD']['status']=='WAITING_BANK_UPDATE'
+
+
+def test_manual_reconcile_is_not_blocked_by_same_previous_day_rate(monkeypatch):
+    import app.sync_engine as se
+    from app.config import Settings
+    from app.credential_store import encrypt_secret
+    from types import SimpleNamespace
+
+    class FakeSap:
+        writes=[]
+        def __init__(self,*args,**kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self,*args): return False
+        def get_currency_rate(self,cur,day): return Decimal('0')
+        def set_currency_rate(self,cur,day,rate): self.writes.append((cur,rate))
+
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'manual-previous.db')
+        cid=add_company(st,currencies_csv='USD',use_usd=True,use_eur=False,primary_bank='A')
+        st.set_secret_blob(cid, encrypt_secret('pw'))
+        today=se._local_day(Settings())
+        yesterday=(today-timedelta(days=1)).isoformat()
+        st.record_market_snapshot(
+            observed_day=yesterday,
+            fetched_at=yesterday+'T06:00:00-06:00',
+            source_code='A',source_name='A',source_url='https://example.com',
+            rates={'USD':{'buy':Decimal('26.90'),'sell':Decimal('27.0200')}},
+            raw_hash='old',
+        )
+        fake=SimpleNamespace(
+            safe=True,warnings=[],notices=[],
+            successful_sources=['A','B','C'],failed_sources={},
+            official_rates={'USD':Decimal('27.0200')},
+        )
+        monkeypatch.setattr(se,'_comparison',lambda settings,store,row:fake)
+        monkeypatch.setattr(se,'SapFxClient',FakeSap)
+
+        result=se.reconcile_company(Settings(),st,cid,scheduled=False)
+
+        assert result.get('retry_required') is None
+        assert result['rates']['USD']['status']=='CREATED_VERIFIED'
+        assert FakeSap.writes
+
+
+def test_scheduler_releases_claim_and_waits_one_hour(monkeypatch):
+    import app.sync_engine as se
+    from app.config import Settings
+
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'retry.db')
+        cid=add_company(st,auto_enabled=True,scheduled_write=True,schedule_hour=0,schedule_minute=0)
+
+        monkeypatch.setattr(
+            se,
+            'reconcile_company',
+            lambda *args,**kwargs: {
+                'company':'SBODEMO',
+                'rates':{'USD':{'status':'WAITING_BANK_UPDATE'}},
+                'retry_required':True,
+                'retry_after_minutes':60,
+            },
+        )
+
+        first=se.run_due_schedules(Settings(),st)
+        assert len(first)==1
+        row=st.get_company(cid)
+        assert row['scheduler_claim_date'] is None
+        assert row['last_run_status']=='WAITING_BANK_UPDATE'
+        assert row['scheduler_next_retry_at']
+        assert row['scheduler_retry_count']==1
+
+        second=se.run_due_schedules(Settings(),st)
+        assert second==[]
+
+
+def test_previous_market_observation_ignores_same_day(tmp_path):
+    st=Store(tmp_path/'previous.db')
+    st.record_market_snapshot(
+        observed_day='2026-10-05',
+        fetched_at='2026-10-05T06:00:00-06:00',
+        source_code='A',source_name='A',source_url='https://example.com',
+        rates={'USD':{'buy':'26.90','sell':'27.01'}},
+        raw_hash='old',
+    )
+    st.record_market_snapshot(
+        observed_day='2026-10-06',
+        fetched_at='2026-10-06T06:00:00-06:00',
+        source_code='A',source_name='A',source_url='https://example.com',
+        rates={'USD':{'buy':'26.91','sell':'27.02'}},
+        raw_hash='new',
+    )
+    previous=st.previous_market_observation('A','USD','2026-10-06')
+    assert previous['observed_day']=='2026-10-05'
+    assert previous['sell']=='27.01'

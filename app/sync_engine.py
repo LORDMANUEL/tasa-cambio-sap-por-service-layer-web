@@ -6,7 +6,7 @@ Three flows are intentionally separate:
 3. reconcile_company(... scheduled=True): automatic daily policy execution.
 """
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 import logging
 from zoneinfo import ZoneInfo
@@ -272,11 +272,56 @@ def reconcile_company(settings:Settings, store:Store, company_id:int, *, schedul
         return {**result,'error':error,'error_recorded':True}
     today=_local_day(settings); sap_url=_sap_url(settings,store,row)
     official=_official_rates(comparison)
+    currencies=_currencies(row)
+
+    waiting={}
+    if scheduled:
+        for cur in currencies:
+            previous=store.previous_market_observation(
+                row['primary_bank'],
+                cur,
+                today.isoformat(),
+            )
+            if previous is None:
+                continue
+            previous_sell=Decimal(str(previous['sell']))
+            if official[cur] == previous_sell:
+                waiting[cur]={
+                    'status':'WAITING_BANK_UPDATE',
+                    'bank':str(official[cur]),
+                    'previous_bank':str(previous_sell),
+                    'previous_day':previous['observed_day'],
+                }
+                store.add_transaction({
+                    'company_id':row['id'],
+                    'company_db':row['database_name'],
+                    'company_name':row['company_name'],
+                    'environment':row['environment'],
+                    'currency':cur,
+                    'primary_bank':row['primary_bank'],
+                    'secondary_bank':row['secondary_bank'],
+                    'sap_before':None,
+                    'bank_rate':str(official[cur]),
+                    'sap_after':None,
+                    'decision':'WAIT_FOR_BANK_REFRESH',
+                    'status':'WAITING_BANK_UPDATE',
+                    'verified':0,
+                    'details_json':f"same-as-{previous['observed_day']}",
+                })
+        result['rates'].update(waiting)
+        if waiting:
+            result['retry_required']=True
+            result['retry_after_minutes']=60
+
+    active_currencies=[cur for cur in currencies if cur not in waiting]
+    if not active_currencies:
+        return result
+
     allowed=_scheduled_write_allowed(store,row) if scheduled else _manual_reconcile_write_allowed(store,row)
     company=SapCompany(row['database_name'],row['environment'],allowed)
     try:
         with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=_sap_verify_tls(settings,store),timeout=settings.sap_timeout_seconds) as sap:
-            for cur in _currencies(row):
+            for cur in active_currencies:
                 before=sap.get_currency_rate(cur,today); bank=official[cur]; decision=decide_rate_action(before,bank)
                 tx={'company_id':row['id'],'company_db':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'currency':cur,'primary_bank':row['primary_bank'],'secondary_bank':row['secondary_bank'],'sap_before':str(before),'bank_rate':str(bank),'decision':decision.action}
                 if decision.action=='MATCH':
@@ -304,6 +349,8 @@ def _run_status(result:dict) -> tuple[str,str]:
     statuses=[str(v.get('status','')) for v in rates.values()]
     if not statuses:
         return 'OK', 'Sin monedas pendientes.'
+    if any(x=='WAITING_BANK_UPDATE' for x in statuses):
+        return 'WAITING_BANK_UPDATE', ', '.join(statuses)
     if any('BLOCKED' in x for x in statuses):
         return 'BLOCKED', ', '.join(statuses)
     if any('VERIFIED' in x or x=='MATCH' for x in statuses):
@@ -329,6 +376,13 @@ def run_due_schedules(settings:Settings, store:Store) -> list[dict]:
     for row in store.list_companies(enabled_only=True):
         if not row.get('auto_enabled'): continue
         if row.get('scheduler_claim_date')==today: continue
+        retry_at=row.get('scheduler_next_retry_at')
+        if retry_at:
+            try:
+                if now < datetime.fromisoformat(retry_at):
+                    continue
+            except ValueError:
+                log.warning('Invalid scheduler_next_retry_at company=%s value=%s',row['database_name'],retry_at)
         due=(now.hour,now.minute) >= (int(row.get('schedule_hour') or 0),int(row.get('schedule_minute') or 0))
         if not due: continue
         if not store.claim_daily_run(row['id'],today):
@@ -339,7 +393,17 @@ def run_due_schedules(settings:Settings, store:Store) -> list[dict]:
             log.exception('Unexpected scheduler failure company=%s',row['database_name'])
             result={'company':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'rates':{},'error':str(exc)}
         status,message=_run_status(result)
-        store.mark_run_result(row['id'],today,status,message)
+        if result.get('retry_required'):
+            next_retry=(now+timedelta(hours=1)).isoformat()
+            store.schedule_daily_retry(
+                row['id'],
+                today,
+                next_retry,
+                f'Tasa bancaria sin cambio respecto al día anterior; reintento {next_retry}',
+            )
+            result['next_retry_at']=next_retry
+        else:
+            store.mark_run_result(row['id'],today,status,message)
         if result.get('error') and not result.get('error_recorded'):
             record_system_error(store,row,result['error'],'scheduler')
         out.append(result)

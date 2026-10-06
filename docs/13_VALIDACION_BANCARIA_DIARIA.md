@@ -57,3 +57,28 @@ Esto evita colocar repetidamente la misma tasa aunque el operador ejecute manual
 ## Seguridad operacional
 
 No debe usarse únicamente un cambio de hash o un cambio de tasa como requisito de frescura. Un banco puede servir el mismo HTML con datos válidos o puede conservar la misma tasa varios días. La decisión se basa en consulta nueva + validación + consenso + lectura SAP.
+
+
+## Memoria del día anterior y espera de una hora
+
+Además de consultar las fuentes nuevamente, Atas conserva en SQLite la última observación validada por fuente, moneda y día.
+
+En una ejecución **automática**:
+
+1. se consulta la fuente oficial del día actual;
+2. se obtiene la observación validada más reciente anterior al día actual;
+3. si la tasa de venta oficial actual es exactamente igual a la anterior, la moneda entra en `WAITING_BANK_UPDATE`;
+4. esa moneda no se escribe en SAP;
+5. el scheduler libera de forma segura el reclamo diario y establece `scheduler_next_retry_at` una hora adelante;
+6. durante esa hora el loop de 30 segundos no vuelve a ejecutar la base;
+7. al cumplirse la hora se consultan de nuevo todos los bancos y se vuelve a validar el consenso.
+
+La memoria se almacena en SQLite y no únicamente en RAM, por lo que un reinicio de Atas no pierde la referencia del día anterior ni la hora del próximo reintento.
+
+### Varias monedas
+
+La espera es por moneda. Si USD no cambió respecto al día anterior pero EUR sí cambió, EUR puede procesarse normalmente. USD queda pendiente y se vuelve a revisar una hora después. En el reintento, cualquier moneda ya procesada se compara nuevamente contra SAP y, si coincide, queda en `MATCH` sin escritura adicional.
+
+### Ejecución manual
+
+Una ejecución manual autorizada no queda bloqueada por esta regla. Esto permite que Contabilidad intervenga si confirma que el banco realmente mantuvo la misma tasa para el nuevo día. La intervención manual sigue respetando consenso, permisos TEST/PROD y verificación posterior en SAP.

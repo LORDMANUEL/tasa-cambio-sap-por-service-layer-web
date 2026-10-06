@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS companies (
   use_eur INTEGER NOT NULL DEFAULT 1,
   last_run_date TEXT,
   scheduler_claim_date TEXT,
+  scheduler_next_retry_at TEXT,
+  scheduler_retry_count INTEGER NOT NULL DEFAULT 0,
   last_run_at TEXT,
   last_run_status TEXT,
   last_run_message TEXT,
@@ -160,6 +162,8 @@ class Store:
             "use_eur": "INTEGER NOT NULL DEFAULT 1",
             "last_run_date": "TEXT",
             "scheduler_claim_date": "TEXT",
+            "scheduler_next_retry_at": "TEXT",
+            "scheduler_retry_count": "INTEGER NOT NULL DEFAULT 0",
             "last_run_at": "TEXT",
             "last_run_status": "TEXT",
             "last_run_message": "TEXT",
@@ -278,7 +282,8 @@ class Store:
         with self.conn() as con:
             cur=con.execute(
                 """UPDATE companies
-                   SET scheduler_claim_date=?, last_run_at=?, last_run_status='RUNNING',
+                   SET scheduler_claim_date=?, scheduler_next_retry_at=NULL,
+                       last_run_at=?, last_run_status='RUNNING',
                        last_run_message='Ejecución diaria reclamada', updated_at=?
                    WHERE id=? AND COALESCE(scheduler_claim_date,'')<>?""",
                 (day,now,now,company_id,day)
@@ -310,7 +315,62 @@ class Store:
     def mark_run_result(self, company_id:int, day:str, status:str, message:str='') -> None:
         now=self.now()
         with self.conn() as con:
-            con.execute("UPDATE companies SET last_run_date=?, last_run_at=?, last_run_status=?, last_run_message=?, updated_at=? WHERE id=?", (day,now,status,message[:500],now,company_id))
+            con.execute(
+                """UPDATE companies
+                   SET last_run_date=?, last_run_at=?, last_run_status=?,
+                       last_run_message=?, scheduler_next_retry_at=NULL,
+                       scheduler_retry_count=0, updated_at=?
+                   WHERE id=?""",
+                (day,now,status,message[:500],now,company_id),
+            )
+
+    def schedule_daily_retry(
+        self,
+        company_id: int,
+        day: str,
+        next_retry_at: str,
+        message: str,
+    ) -> None:
+        """Release today's claim and defer the automatic run until next_retry_at.
+
+        The release is deliberate: it allows the same local day to be claimed
+        again after the waiting period while keeping an explicit retry timestamp
+        that prevents the 30-second scheduler loop from retrying early.
+        """
+        now=self.now()
+        with self.conn() as con:
+            con.execute(
+                """UPDATE companies
+                   SET scheduler_claim_date=NULL,
+                       scheduler_next_retry_at=?,
+                       scheduler_retry_count=scheduler_retry_count+1,
+                       last_run_at=?,
+                       last_run_status='WAITING_BANK_UPDATE',
+                       last_run_message=?,
+                       updated_at=?
+                   WHERE id=? AND scheduler_claim_date=?""",
+                (next_retry_at,now,message[:500],now,company_id,day),
+            )
+
+    def previous_market_observation(
+        self,
+        source_code: str,
+        currency: str,
+        before_day: str,
+    ):
+        """Return the most recent validated source rate strictly before a day."""
+        with self.conn() as con:
+            row=con.execute(
+                """SELECT * FROM market_observations
+                   WHERE upper(source_code)=upper(?)
+                     AND upper(currency)=upper(?)
+                     AND observed_day<?
+                     AND validated=1
+                   ORDER BY observed_day DESC, fetched_at DESC
+                   LIMIT 1""",
+                (source_code,currency,before_day),
+            ).fetchone()
+            return dict(row) if row else None
 
     def delete_company(self, company_id: int) -> None:
         with self.conn() as con:
