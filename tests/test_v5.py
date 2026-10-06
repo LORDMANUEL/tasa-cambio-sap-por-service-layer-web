@@ -757,11 +757,14 @@ def test_manual_reconcile_is_not_blocked_by_same_previous_day_rate(monkeypatch):
 
     class FakeSap:
         writes=[]
-        def __init__(self,*args,**kwargs): pass
+        def __init__(self,*args,**kwargs):
+            self.current=Decimal('0')
         def __enter__(self): return self
         def __exit__(self,*args): return False
-        def get_currency_rate(self,cur,day): return Decimal('0')
-        def set_currency_rate(self,cur,day,rate): self.writes.append((cur,rate))
+        def get_currency_rate(self,cur,day): return self.current
+        def set_currency_rate(self,cur,day,rate):
+            self.writes.append((cur,rate))
+            self.current=Decimal(str(rate))
 
     with tempfile.TemporaryDirectory() as d:
         st=Store(Path(d)/'manual-previous.db')

@@ -82,3 +82,8 @@ La espera es por moneda. Si USD no cambió respecto al día anterior pero EUR s�
 ### Ejecución manual
 
 Una ejecución manual autorizada no queda bloqueada por esta regla. Esto permite que Contabilidad intervenga si confirma que el banco realmente mantuvo la misma tasa para el nuevo día. La intervención manual sigue respetando consenso, permisos TEST/PROD y verificación posterior en SAP.
+
+
+## Validación del contrato de escritura
+
+Las pruebas de integración simuladas deben reproducir el contrato real del Service Layer: después de una escritura aceptada, el GET de verificación debe devolver el nuevo valor. Esto evita falsos positivos y garantiza que las pruebas cubran la verificación posterior a escritura, no sólo la llamada POST.
