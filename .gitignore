@@ -18,3 +18,7 @@ vendor/wheels/
 .prepared_v5
 app/static/uploads/*
 !app/static/uploads/.gitkeep
+
+# Sensitive local recovery archives
+data/backups/
+*.atas-backup.zip
