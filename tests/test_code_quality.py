@@ -67,3 +67,12 @@ def test_sync_engine_company_lookup_has_one_domain_error(tmp_path):
         assert False
     except ValueError as exc:
         assert str(exc) == "Compañía no encontrada"
+
+
+def test_sync_engine_local_day_is_timezone_aware():
+    import app.sync_engine as sync
+
+    settings = Settings(timezone="America/Tegucigalpa")
+    day = sync._local_day(settings)
+    expected = datetime.now(ZoneInfo("America/Tegucigalpa")).date()
+    assert day == expected

@@ -55,3 +55,8 @@ Esto reduce ramas duplicadas y evita que TEST/PROD interpreten flags de forma di
 `app/main.py` sigue siendo un módulo grande. Debe dividirse progresivamente por routers funcionales (setup, companies, banks, automation, audit/settings), pero en cambios pequeños para conservar las pruebas actuales y no introducir regresiones en el wizard.
 
 También conviene introducir tipado estático incremental y pruebas de rendimiento para consultas de auditoría cuando el volumen de transacciones sea alto.
+
+
+## Lección de refactor documentada
+
+El build #184 detectó una regresión de recursión accidental en el helper de fecha local introducida por un reemplazo mecánico. El cambio no llegó a una release: CI falló en Windows y Debian. Se corrigió el helper y se añadió una prueba directa de zona horaria para que esta clase de regresión quede cubierta.

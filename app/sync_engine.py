@@ -30,7 +30,7 @@ def _require_company(store: Store, company_id: int) -> dict:
 
 def _local_day(settings: Settings):
     """Return today's date in the installation timezone."""
-    return _local_day(settings)
+    return datetime.now(ZoneInfo(settings.timezone)).date()
 
 
 def _setting_enabled(value: object) -> bool:
