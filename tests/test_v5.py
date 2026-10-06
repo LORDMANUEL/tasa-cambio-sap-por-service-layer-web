@@ -927,3 +927,29 @@ def test_scheduler_stops_after_configured_same_rate_retries(monkeypatch):
 def test_notification_marks_retry_exhausted_as_attention():
     from app.notifications import _result_needs_attention
     assert _result_needs_attention({'retry_exhausted':True,'rates':{}})
+
+
+def test_settings_backup_route_creates_verified_archive(monkeypatch,tmp_path):
+    from fastapi.testclient import TestClient
+    import app.main as m
+
+    st=Store(tmp_path/'web-backup.db')
+    st.set_settings({'setup_complete':'true','organization_name':'Demo'})
+    monkeypatch.setattr(m,'store',st)
+    m.settings.web_admin_user='admin'
+    m.settings.web_admin_password_hash=m.password_hash('admin123')
+    m.settings.web_session_secret='z'*48
+
+    created={}
+    def fake_backup(settings,path):
+        created['path']=path
+        return {'name':'atas-backup-test.zip','path':str(tmp_path/'atas-backup-test.zip'),'sha256':'a'*64}
+
+    monkeypatch.setattr(m,'create_backup',fake_backup)
+    client=TestClient(m.app)
+    login=client.post('/login',data={'user':'admin','password':'admin123'},follow_redirects=False)
+    cookie=login.cookies.get(m.COOKIE)
+    r=client.post('/settings/backup',headers={'cookie':f'{m.COOKIE}={cookie}'})
+    assert r.status_code==200
+    assert 'Backup verificado' in r.text
+    assert created['path']==st.path

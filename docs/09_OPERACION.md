@@ -13,3 +13,12 @@
 11. GET posterior verifica Decimal exacto.
 12. Registra transacción y última ejecución.
 13. Si SMTP está habilitado, envía resumen.
+
+
+## Backup e integridad
+
+Desde **Configuración → Backup e integridad** se crea un snapshot consistente mediante la API online de SQLite. Atas valida la base antes del snapshot, valida nuevamente el snapshot, calcula SHA-256 y vuelve a validar el ZIP final.
+
+Los archivos se guardan en `data/backups/` y son sensibles. En Linux el backup puede incluir la clave Fernet necesaria para recuperar credenciales; en Windows las credenciales DPAPI permanecen ligadas al usuario/máquina que las cifró.
+
+La restauración en caliente no está permitida. El procedimiento de restauración será offline/controlado para no reemplazar SQLite mientras el servicio tiene conexiones abiertas.
