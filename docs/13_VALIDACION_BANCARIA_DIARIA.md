@@ -94,3 +94,28 @@ Las pruebas de integración simuladas deben reproducir el contrato real del Serv
 `WAITING_BANK_UPDATE` se considera un estado de atención, no un éxito silencioso. El dashboard lo muestra como advertencia y las notificaciones lo clasifican como atención requerida para que Contabilidad sepa que Atas está esperando una publicación bancaria nueva.
 
 La migración de una instalación existente agrega los campos de reintento sin borrar `scheduler_claim_date`, historial, credenciales ni configuración previa.
+
+
+## Límite de reintentos
+
+Para evitar un ciclo automático infinito cuando un banco conserva legítimamente la misma tasa durante todo el día, Atas limita los reintentos de tasa repetida.
+
+El valor predeterminado es `max_same_rate_retries = 3`. Con una espera de una hora, esto permite tres comprobaciones adicionales después de la ejecución inicial.
+
+Cuando se alcanza el límite:
+
+- se deja de reintentar automáticamente;
+- el estado pasa a `ATTENTION`;
+- se limpia `scheduler_next_retry_at`;
+- se notifica que requiere validación manual;
+- no se escribe la tasa repetida automáticamente.
+
+## Visualización
+
+La pantalla de Automatización muestra, cuando aplica:
+
+- fecha/hora del próximo intento;
+- número de intento acumulado;
+- estado `WAITING_BANK_UPDATE`.
+
+Esto permite a Contabilidad distinguir entre un fallo, una espera normal del banco y una intervención manual requerida.

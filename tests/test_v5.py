@@ -887,3 +887,43 @@ def test_existing_database_migrates_retry_columns_without_losing_claim(tmp_path)
     assert row['scheduler_claim_date']=='2026-10-06'
     assert row['scheduler_next_retry_at'] is None
     assert row['scheduler_retry_count']==0
+
+
+def test_scheduler_stops_after_configured_same_rate_retries(monkeypatch):
+    import app.sync_engine as se
+    from app.config import Settings
+
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'retry-limit.db')
+        cid=add_company(st,auto_enabled=True,scheduled_write=True,schedule_hour=0,schedule_minute=0)
+        st.set_settings({'max_same_rate_retries':'2'})
+
+        with st.conn() as con:
+            con.execute(
+                "UPDATE companies SET scheduler_retry_count=2 WHERE id=?",
+                (cid,),
+            )
+
+        monkeypatch.setattr(
+            se,
+            'reconcile_company',
+            lambda *args,**kwargs: {
+                'company':'SBODEMO',
+                'rates':{'USD':{'status':'WAITING_BANK_UPDATE'}},
+                'retry_required':True,
+                'retry_after_minutes':60,
+            },
+        )
+
+        out=se.run_due_schedules(Settings(),st)
+        assert len(out)==1
+        assert out[0]['retry_exhausted'] is True
+        row=st.get_company(cid)
+        assert row['last_run_status']=='ATTENTION'
+        assert row['scheduler_next_retry_at'] is None
+        assert row['scheduler_retry_count']==0
+
+
+def test_notification_marks_retry_exhausted_as_attention():
+    from app.notifications import _result_needs_attention
+    assert _result_needs_attention({'retry_exhausted':True,'rates':{}})

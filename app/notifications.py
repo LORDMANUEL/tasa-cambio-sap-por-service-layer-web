@@ -61,7 +61,7 @@ def send_email(store, subject: str, text: str) -> dict:
 
 
 def _result_needs_attention(result: dict) -> bool:
-    if result.get('error'):
+    if result.get('error') or result.get('attention') or result.get('retry_exhausted'):
         return True
     for data in (result.get('rates') or {}).values():
         status=str(data.get('status') or '').upper()

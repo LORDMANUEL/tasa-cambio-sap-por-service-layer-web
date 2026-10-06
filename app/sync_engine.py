@@ -394,14 +394,32 @@ def run_due_schedules(settings:Settings, store:Store) -> list[dict]:
             result={'company':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'rates':{},'error':str(exc)}
         status,message=_run_status(result)
         if result.get('retry_required'):
-            next_retry=(now+timedelta(hours=1)).isoformat()
-            store.schedule_daily_retry(
-                row['id'],
-                today,
-                next_retry,
-                f'Tasa bancaria sin cambio respecto al día anterior; reintento {next_retry}',
-            )
-            result['next_retry_at']=next_retry
+            cfg=store.get_settings()
+            max_retries=max(1,int(cfg.get('max_same_rate_retries','3') or 3))
+            current_retries=int(row.get('scheduler_retry_count') or 0)
+            if current_retries >= max_retries:
+                result['retry_required']=False
+                result['retry_exhausted']=True
+                exhausted_message=(
+                    f'Tasa bancaria igual al día anterior tras {current_retries} reintentos; '
+                    'requiere validación manual.'
+                )
+                store.mark_run_result(
+                    row['id'],
+                    today,
+                    'ATTENTION',
+                    exhausted_message,
+                )
+                result['attention']=exhausted_message
+            else:
+                next_retry=(now+timedelta(hours=1)).isoformat()
+                store.schedule_daily_retry(
+                    row['id'],
+                    today,
+                    next_retry,
+                    f'Tasa bancaria sin cambio respecto al día anterior; reintento {next_retry}',
+                )
+                result['next_retry_at']=next_retry
         else:
             store.mark_run_result(row['id'],today,status,message)
         if result.get('error') and not result.get('error_recorded'):
