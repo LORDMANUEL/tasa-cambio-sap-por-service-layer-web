@@ -65,7 +65,12 @@ def _result_needs_attention(result: dict) -> bool:
         return True
     for data in (result.get('rates') or {}).values():
         status=str(data.get('status') or '').upper()
-        if 'BLOCKED' in status or 'ERROR' in status or 'FAILED' in status:
+        if (
+            'BLOCKED' in status
+            or 'ERROR' in status
+            or 'FAILED' in status
+            or 'WAITING_BANK_UPDATE' in status
+        ):
             return True
     return False
 

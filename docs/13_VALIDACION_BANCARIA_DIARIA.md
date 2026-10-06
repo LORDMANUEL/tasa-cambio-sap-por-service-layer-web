@@ -87,3 +87,10 @@ Una ejecución manual autorizada no queda bloqueada por esta regla. Esto permite
 ## Validación del contrato de escritura
 
 Las pruebas de integración simuladas deben reproducir el contrato real del Service Layer: después de una escritura aceptada, el GET de verificación debe devolver el nuevo valor. Esto evita falsos positivos y garantiza que las pruebas cubran la verificación posterior a escritura, no sólo la llamada POST.
+
+
+## Visibilidad operativa
+
+`WAITING_BANK_UPDATE` se considera un estado de atención, no un éxito silencioso. El dashboard lo muestra como advertencia y las notificaciones lo clasifican como atención requerida para que Contabilidad sepa que Atas está esperando una publicación bancaria nueva.
+
+La migración de una instalación existente agrega los campos de reintento sin borrar `scheduler_claim_date`, historial, credenciales ni configuración previa.

@@ -540,6 +540,7 @@ def test_debian_packaging_keeps_persistent_data_out_of_opt_payload():
 def test_notification_classifies_blocked_run_as_attention():
     from app.notifications import _result_needs_attention
     assert _result_needs_attention({'rates':{'USD':{'status':'MATCH'},'EUR':{'status':'UPDATE_WRITE_BLOCKED'}}})
+    assert _result_needs_attention({'rates':{'USD':{'status':'WAITING_BANK_UPDATE'}}})
     assert not _result_needs_attention({'rates':{'USD':{'status':'MATCH'}}})
 
 
@@ -844,3 +845,45 @@ def test_previous_market_observation_ignores_same_day(tmp_path):
     previous=st.previous_market_observation('A','USD','2026-10-06')
     assert previous['observed_day']=='2026-10-05'
     assert previous['sell']=='27.01'
+
+
+def test_existing_database_migrates_retry_columns_without_losing_claim(tmp_path):
+    import sqlite3
+
+    db=tmp_path/'migration-retry.db'
+    con=sqlite3.connect(db)
+    try:
+        con.executescript("""
+        CREATE TABLE companies (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          company_name TEXT NOT NULL,
+          database_name TEXT NOT NULL UNIQUE,
+          environment TEXT NOT NULL,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          allow_write INTEGER NOT NULL DEFAULT 0,
+          sap_user TEXT NOT NULL DEFAULT '',
+          sap_secret TEXT,
+          primary_bank TEXT NOT NULL DEFAULT 'BANPAIS',
+          secondary_bank TEXT NOT NULL DEFAULT 'FICOHSA',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          scheduler_claim_date TEXT
+        );
+        INSERT INTO companies(
+          company_name,database_name,environment,enabled,allow_write,sap_user,
+          primary_bank,secondary_bank,created_at,updated_at,scheduler_claim_date
+        ) VALUES(
+          'Empresa','LEGACY_RETRY','TEST',1,0,'manager',
+          'A','B','2026-10-05','2026-10-05','2026-10-06'
+        );
+        """)
+        con.commit()
+    finally:
+        con.close()
+
+    st=Store(db)
+    row=st.get_company_by_database('LEGACY_RETRY')
+
+    assert row['scheduler_claim_date']=='2026-10-06'
+    assert row['scheduler_next_retry_at'] is None
+    assert row['scheduler_retry_count']==0

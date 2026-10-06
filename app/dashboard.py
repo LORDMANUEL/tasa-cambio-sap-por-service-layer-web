@@ -7,7 +7,7 @@ def esc(value)->str: return html.escape('' if value is None else str(value))
 
 def badge(value)->str:
     text=esc(value); upper=text.upper()
-    css='ok' if any(x in upper for x in ('MATCH','VERIFIED','OK','CREATED','UPDATED','ACTIVA','FUNCIONA','LISTO','EN LÍNEA')) else ('bad' if any(x in upper for x in ('ERROR','FAILED','BLOCKED','FALLÓ')) else 'warn')
+    css='ok' if any(x in upper for x in ('MATCH','VERIFIED','OK','CREATED','UPDATED','ACTIVA','FUNCIONA','LISTO','EN LÍNEA')) else ('bad' if any(x in upper for x in ('ERROR','FAILED','BLOCKED','FALLÓ')) else ('warn' if 'WAITING_BANK_UPDATE' in upper or 'WAITING' in upper else 'warn'))
     return f"<span class='badge {css}'>{text}</span>"
 
 def page_header(title:str,subtitle:str='',action_html:str='')->str:
