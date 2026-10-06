@@ -16,7 +16,7 @@ def test_fastapi_metadata_uses_version_file():
     assert main.app.version == get_version()
 
 
-def test_cleanup_applies_retention_to_transactions_and_bank_checks(tmp_path):
+def test_cleanup_preserves_transaction_audit_and_expires_bank_checks(tmp_path):
     st = Store(tmp_path / "retention.db")
     old = (
         datetime.now(ZoneInfo(st.timezone)) - timedelta(days=45)
@@ -38,15 +38,15 @@ def test_cleanup_applies_retention_to_transactions_and_bank_checks(tmp_path):
 
     deleted = st.cleanup(30)
 
-    assert deleted == {"transactions": 1, "bank_checks": 1}
-    assert st.list_transactions(10) == []
+    assert deleted == {"bank_checks": 1}
+    assert len(st.list_transactions(10)) == 1
     assert st.recent_bank_checks(10) == []
 
 
 def test_cleanup_never_uses_zero_day_retention(tmp_path):
     st = Store(tmp_path / "retention.db")
     result = st.cleanup(0)
-    assert set(result) == {"transactions", "bank_checks"}
+    assert set(result) == {"bank_checks"}
 
 
 def test_sync_engine_boolean_normalization():

@@ -403,24 +403,19 @@ class Store:
             con.execute("UPDATE bank_sources SET last_status=?,last_error=?,last_checked_at=?,updated_at=? WHERE id=?",('OK' if ok else 'ERROR','' if ok else message[:500],self.now(),self.now(),source_id))
 
     def cleanup(self, days: int) -> dict[str, int]:
-        """Delete expired operational history and return deletion counts.
+        """Expire operational bank checks without deleting SAP audit history.
 
-        The retention setting applies to both transaction audit rows and legacy
-        bank_checks. Keeping both tables bounded prevents a long-running local
-        installation from growing indefinitely while preserving the configured
-        number of days of evidence.
+        The log-retention setting is operational. Transaction rows are audit
+        evidence and remain intact unless a separate audit-retention policy is
+        explicitly introduced.
         """
         retention_days = max(1, int(days))
         cutoff = (
             datetime.now(ZoneInfo(self.timezone)) - timedelta(days=retention_days)
         ).isoformat()
         with self.conn() as con:
-            tx = con.execute(
-                "DELETE FROM transactions WHERE occurred_at<?",
-                (cutoff,),
-            ).rowcount
             checks = con.execute(
                 "DELETE FROM bank_checks WHERE checked_at<?",
                 (cutoff,),
             ).rowcount
-        return {"transactions": tx, "bank_checks": checks}
+        return {"bank_checks": checks}

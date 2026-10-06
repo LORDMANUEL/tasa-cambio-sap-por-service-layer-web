@@ -20,11 +20,11 @@ Atas debe mantenerse pequeño, verificable y seguro para operar una tarea contab
 
 FastAPI ya no expone una versión fija independiente. La versión del API se resuelve mediante `get_version()`, evitando discrepancias entre binarios, `/health`, metadata y empaquetado.
 
-### Retención real de datos
+### Retención segura de datos
 
-`Store.cleanup()` ahora aplica la retención configurada tanto a `transactions` como a `bank_checks`. Antes sólo se eliminaban verificaciones bancarias y la tabla principal de auditoría podía crecer indefinidamente.
+`Store.cleanup()` aplica la retención operativa únicamente a `bank_checks` y devuelve el contador de filas eliminadas. La tabla `transactions` se conserva porque representa evidencia de auditoría sobre lecturas/escrituras SAP.
 
-La función devuelve contadores de filas eliminadas para facilitar observabilidad futura.
+No se debe reutilizar `log_retention_days` para eliminar auditoría contable. Si en el futuro se requiere depuración de `transactions`, debe existir una política separada, explícita, documentada y configurable.
 
 ### Escrituras de configuración
 
