@@ -656,3 +656,46 @@ def test_legacy_noop_settings_removed():
     for name in ('APP_HOST','APP_API_KEY','SAP_ENABLED','SAP_ALLOW_PROD_WRITE'):
         assert name not in env
     assert 'from app.bank_registry import BANKS, automatic_banks' not in main
+
+
+def test_reconcile_match_never_writes_same_rate_again(monkeypatch):
+    import app.sync_engine as se
+    from app.config import Settings
+    from types import SimpleNamespace
+
+    class FakeSap:
+        writes=[]
+        def __init__(self,*args,**kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self,*args): return False
+        def get_currency_rate(self,cur,day): return Decimal('27.0200')
+        def set_currency_rate(self,cur,day,rate): self.writes.append((cur,day,rate))
+
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'same-rate.db')
+        cid=add_company(
+            st,
+            currencies_csv='USD',
+            use_usd=True,
+            use_eur=False,
+            bank_source_codes='A,B,C',
+            primary_bank='A',
+            auto_enabled=True,
+            scheduled_write=True,
+        )
+        st.set_secret_blob(cid, encrypt_secret('pw'))
+        fake=SimpleNamespace(
+            safe=True,
+            warnings=[],
+            notices=[],
+            successful_sources=['A','B','C'],
+            failed_sources={},
+            official_rates={'USD':Decimal('27.0200')},
+        )
+        monkeypatch.setattr(se,'_comparison',lambda settings,store,row:fake)
+        monkeypatch.setattr(se,'SapFxClient',FakeSap)
+
+        result=se.reconcile_company(Settings(),st,cid,scheduled=True)
+
+        assert result['rates']['USD']['status']=='MATCH'
+        assert FakeSap.writes==[]

@@ -8,5 +8,12 @@ def secure_session() -> requests.Session:
     session = requests.Session()
     retry = Retry(total=3,connect=3,read=2,backoff_factor=0.5,status_forcelist=(429,500,502,503,504),allowed_methods=frozenset({"GET"}),raise_on_status=False)
     session.mount("https://", HTTPAdapter(max_retries=retry))
-    session.headers.update({"User-Agent":"SAP-FX-Control-Center/1.0 (+internal finance automation)","Accept":"text/html,application/xhtml+xml","Accept-Language":"es-HN,es;q=0.9,en;q=0.5","Connection":"close"})
+    session.headers.update({
+        "User-Agent":"Atas/5 (+internal finance automation)",
+        "Accept":"text/html,application/xhtml+xml,application/json",
+        "Accept-Language":"es-HN,es;q=0.9,en;q=0.5",
+        "Cache-Control":"no-cache, no-store, max-age=0",
+        "Pragma":"no-cache",
+        "Connection":"close",
+    })
     return session

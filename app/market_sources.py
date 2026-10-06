@@ -373,8 +373,20 @@ def build_consensus(store, settings: Settings, company: dict, currencies: list[s
             failed[code] = "Fuente inexistente o deshabilitada"
             continue
         try:
+            # Always perform a fresh network fetch. The shared HTTP client sends
+            # no-cache headers so a previous day's page is not intentionally reused.
             snap = fetch_source(src, settings)
             validate_snapshot_pairs(snap, max_pair_spread)
+            observed_day = datetime.now(ZoneInfo(settings.timezone)).date().isoformat()
+            store.record_market_snapshot(
+                observed_day=observed_day,
+                fetched_at=snap.fetched_at,
+                source_code=snap.code,
+                source_name=snap.name,
+                source_url=snap.source_url,
+                rates=snap.rates,
+                raw_hash=snap.raw_hash,
+            )
             snapshots.append(snap)
             store.mark_bank_source_result(src["id"], True, "OK")
         except Exception as exc:

@@ -1,5 +1,7 @@
 from decimal import Decimal
 from pathlib import Path
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import tempfile
 
 from app.market_sources import _extract_html, _extract_json, build_consensus
@@ -170,3 +172,57 @@ def test_consensus_blocks_when_outlier_removal_leaves_fewer_than_three(monkeypat
         c=ms.build_consensus(st,Settings(),{'primary_bank':'A','bank_source_codes':'A,B,C,D'},['USD'])
         assert not c.safe
         assert any('fuentes coherentes' in warning for warning in c.warnings)
+
+
+def test_consensus_refetches_sources_every_execution_and_records_daily_evidence(monkeypatch):
+    import app.market_sources as ms
+    from app.market_sources import SourceSnapshot
+
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'freshness.db')
+        for code in ('A','B','C'):
+            st.upsert_bank_source(
+                source_id=None,
+                code=code,
+                name=code,
+                country='HN',
+                source_type='WEB_HTML',
+                url='https://example.com',
+                enabled=True,
+                config_json='{}',
+            )
+
+        calls=[]
+        values={'A':Decimal('27.0200'),'B':Decimal('27.0100'),'C':Decimal('27.0300')}
+
+        def fake(src,settings):
+            calls.append(src['code'])
+            v=values[src['code']]
+            return SourceSnapshot(
+                src['code'],src['name'],src['source_type'],src['url'],
+                datetime.now().astimezone().isoformat(),
+                {'USD':{'buy':v-Decimal('.10'),'sell':v}},
+                f"hash-{src['code']}-{len(calls)}",
+            )
+
+        monkeypatch.setattr(ms,'fetch_source',fake)
+        company={'primary_bank':'A','bank_source_codes':'A,B,C'}
+
+        first=ms.build_consensus(st,Settings(),company,['USD'])
+        second=ms.build_consensus(st,Settings(),company,['USD'])
+
+        assert first.safe and second.safe
+        assert calls==['A','B','C','A','B','C']
+
+        day=datetime.now(ZoneInfo(Settings().timezone)).date().isoformat()
+        observations=st.daily_market_observations(day)
+        assert len(observations)==3
+        assert {row['source_code'] for row in observations}=={'A','B','C'}
+
+
+def test_secure_bank_http_session_disables_cache():
+    from app.providers.http_client import secure_session
+
+    session=secure_session()
+    assert 'no-cache' in session.headers['Cache-Control']
+    assert session.headers['Pragma']=='no-cache'

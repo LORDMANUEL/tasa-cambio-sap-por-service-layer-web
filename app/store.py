@@ -106,6 +106,24 @@ CREATE TABLE IF NOT EXISTS bank_sources (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_bank_sources_enabled ON bank_sources(enabled, code);
+CREATE TABLE IF NOT EXISTS market_observations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  observed_day TEXT NOT NULL,
+  fetched_at TEXT NOT NULL,
+  source_code TEXT NOT NULL,
+  source_name TEXT NOT NULL,
+  source_url TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  buy TEXT NOT NULL,
+  sell TEXT NOT NULL,
+  raw_hash TEXT NOT NULL,
+  validated INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(source_code, observed_day, currency)
+);
+CREATE INDEX IF NOT EXISTS idx_market_observations_day
+  ON market_observations(observed_day DESC, source_code, currency);
 """
 
 class Store:
@@ -401,6 +419,74 @@ class Store:
     def mark_bank_source_result(self, source_id: int, ok: bool, message: str='') -> None:
         with self.conn() as con:
             con.execute("UPDATE bank_sources SET last_status=?,last_error=?,last_checked_at=?,updated_at=? WHERE id=?",('OK' if ok else 'ERROR','' if ok else message[:500],self.now(),self.now(),source_id))
+
+    def record_market_snapshot(
+        self,
+        *,
+        observed_day: str,
+        fetched_at: str,
+        source_code: str,
+        source_name: str,
+        source_url: str,
+        rates: dict,
+        raw_hash: str,
+    ) -> int:
+        """Persist the latest validated observation for each source/currency/day.
+
+        Repeated checks on the same day update the same row instead of creating
+        duplicate evidence. This proves that a source was consulted that day
+        without treating an unchanged market rate as stale.
+        """
+        now = self.now()
+        rows = []
+        for currency, pair in rates.items():
+            rows.append((
+                observed_day,
+                fetched_at,
+                source_code.upper(),
+                source_name,
+                source_url,
+                currency.upper(),
+                str(pair["buy"]),
+                str(pair["sell"]),
+                raw_hash,
+                1,
+                now,
+                now,
+            ))
+        if not rows:
+            return 0
+        with self.conn() as con:
+            con.executemany(
+                """INSERT INTO market_observations(
+                     observed_day,fetched_at,source_code,source_name,source_url,
+                     currency,buy,sell,raw_hash,validated,created_at,updated_at
+                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(source_code,observed_day,currency) DO UPDATE SET
+                     fetched_at=excluded.fetched_at,
+                     source_name=excluded.source_name,
+                     source_url=excluded.source_url,
+                     buy=excluded.buy,
+                     sell=excluded.sell,
+                     raw_hash=excluded.raw_hash,
+                     validated=excluded.validated,
+                     updated_at=excluded.updated_at""",
+                rows,
+            )
+        return len(rows)
+
+    def daily_market_observations(self, observed_day: str) -> list[dict]:
+        """Return validated banking observations recorded for one local day."""
+        with self.conn() as con:
+            return [
+                dict(r)
+                for r in con.execute(
+                    """SELECT * FROM market_observations
+                       WHERE observed_day=?
+                       ORDER BY source_code,currency""",
+                    (observed_day,),
+                ).fetchall()
+            ]
 
     def cleanup(self, days: int) -> dict[str, int]:
         """Expire operational bank checks without deleting SAP audit history.
