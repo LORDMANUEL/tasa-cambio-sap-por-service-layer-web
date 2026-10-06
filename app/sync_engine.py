@@ -20,6 +20,24 @@ from app.policy import decide_rate_action
 log=logging.getLogger(__name__)
 
 
+def _require_company(store: Store, company_id: int) -> dict:
+    """Return one configured company or fail with the canonical domain error."""
+    row = store.get_company(company_id)
+    if not row:
+        raise ValueError('Compañía no encontrada')
+    return row
+
+
+def _local_day(settings: Settings):
+    """Return today's date in the installation timezone."""
+    return _local_day(settings)
+
+
+def _setting_enabled(value: object) -> bool:
+    """Normalize persisted booleans coming from SQLite/string settings."""
+    return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 def _sap_url(settings:Settings, store:Store, row:dict) -> str:
     """Resolve the effective Service Layer endpoint for one company.
 
@@ -52,7 +70,7 @@ def _sap_verify_tls(settings:Settings, store:Store) -> bool:
     value=store.get_settings().get('sap_verify_tls')
     if value is None:
         return bool(settings.sap_verify_tls)
-    return str(value).strip().lower() in {'1','true','yes','on'}
+    return _setting_enabled(value)
 
 
 def _password(row:dict) -> str:
@@ -70,9 +88,7 @@ def _official_rates(comparison) -> dict[str,Decimal]:
 
 def inspect_company(settings:Settings, store:Store, company_id:int) -> dict:
     """Read SAP first, then enrich with bank consensus without ever writing."""
-    row=store.get_company(company_id)
-    if not row:
-        raise ValueError('Compañía no encontrada')
+    row=_require_company(store, company_id)
     result={
         'company':row['database_name'],
         'company_name':row['company_name'],
@@ -83,7 +99,7 @@ def inspect_company(settings:Settings, store:Store, company_id:int) -> dict:
     try:
         password=_password(row)
         sap_url=_sap_url(settings,store,row)
-        today=datetime.now(ZoneInfo(settings.timezone)).date()
+        today=_local_day(settings)
         currencies=_currencies(row)
         sap_rates={}
         company=SapCompany(row['database_name'],row['environment'],False)
@@ -131,7 +147,7 @@ def inspect_company(settings:Settings, store:Store, company_id:int) -> dict:
                 can_test=row['environment']=='TEST' and bool(row.get('allow_write')) and not matches
                 can_prod=(
                     row['environment']=='PROD'
-                    and store.get_settings().get('prod_automation_enabled','false').lower()=='true'
+                    and _setting_enabled(store.get_settings().get('prod_automation_enabled', 'false'))
                     and bool(row.get('scheduled_write'))
                     and not matches
                 )
@@ -178,7 +194,7 @@ def write_suggested_test(settings:Settings, store:Store, company_id:int, currenc
     if not comparison.safe: raise SapError('Validación bancaria no segura: '+'; '.join(comparison.warnings))
     bank=_official_rates(comparison)[cur]; password=_password(row)
     sap_url=_sap_url(settings,store,row)
-    today=datetime.now(ZoneInfo(settings.timezone)).date(); company=SapCompany(row['database_name'],'TEST',True)
+    today=_local_day(settings); company=SapCompany(row['database_name'],'TEST',True)
     with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=_sap_verify_tls(settings,store),timeout=settings.sap_timeout_seconds) as sap:
         before=sap.get_currency_rate(cur,today); sap.set_currency_rate(cur,today,bank); after=sap.get_currency_rate(cur,today)
         if after!=bank: raise SapError(f'Verificación fallida: esperado {bank}, leído {after}')
@@ -197,7 +213,7 @@ def write_suggested_manual(settings:Settings, store:Store, company_id:int, curre
         if not row.get('allow_write'):
             raise SapError('Active "Permitir prueba de escritura" en esta base TEST.')
     else:
-        if runtime.get('prod_automation_enabled','false').lower()!='true':
+        if not _setting_enabled(runtime.get('prod_automation_enabled', 'false')):
             raise SapError('PROD está bloqueado globalmente. Habilítelo en Automatización.')
         if not row.get('scheduled_write'):
             raise SapError('Esta base PROD no tiene autorizada la escritura. Active "Autorizar escritura programada".')
@@ -206,7 +222,7 @@ def write_suggested_manual(settings:Settings, store:Store, company_id:int, curre
     if not comparison.safe: raise SapError('Validación bancaria no segura: '+'; '.join(comparison.warnings))
     bank=_official_rates(comparison)[cur]; password=_password(row)
     sap_url=_sap_url(settings,store,row)
-    today=datetime.now(ZoneInfo(settings.timezone)).date(); company=SapCompany(row['database_name'],row['environment'],True)
+    today=_local_day(settings); company=SapCompany(row['database_name'],row['environment'],True)
     with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=_sap_verify_tls(settings,store),timeout=settings.sap_timeout_seconds) as sap:
         before=sap.get_currency_rate(cur,today)
         if before==bank:
@@ -224,7 +240,7 @@ def _scheduled_write_allowed(store:Store,row:dict) -> bool:
         return False
     if row['environment']=='TEST':
         return True
-    return store.get_settings().get('prod_automation_enabled','false').lower()=='true'
+    return _setting_enabled(store.get_settings().get('prod_automation_enabled', 'false'))
 
 
 def _manual_reconcile_write_allowed(store:Store,row:dict) -> bool:
@@ -233,7 +249,7 @@ def _manual_reconcile_write_allowed(store:Store,row:dict) -> bool:
         return bool(row.get('allow_write') or row.get('scheduled_write'))
     return (
         bool(row.get('scheduled_write'))
-        and store.get_settings().get('prod_automation_enabled','false').lower()=='true'
+        and _setting_enabled(store.get_settings().get('prod_automation_enabled', 'false'))
     )
 
 
@@ -254,7 +270,7 @@ def reconcile_company(settings:Settings, store:Store, company_id:int, *, schedul
         error=str(exc)
         record_system_error(store,row,error,'credentials')
         return {**result,'error':error,'error_recorded':True}
-    today=datetime.now(ZoneInfo(settings.timezone)).date(); sap_url=_sap_url(settings,store,row)
+    today=_local_day(settings); sap_url=_sap_url(settings,store,row)
     official=_official_rates(comparison)
     allowed=_scheduled_write_allowed(store,row) if scheduled else _manual_reconcile_write_allowed(store,row)
     company=SapCompany(row['database_name'],row['environment'],allowed)

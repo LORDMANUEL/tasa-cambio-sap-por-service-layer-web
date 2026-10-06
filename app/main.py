@@ -86,7 +86,7 @@ async def lifespan(app):
     _stop.set()
     if _thread and _thread.is_alive(): _thread.join(timeout=2)
 
-app=FastAPI(title='Atas V5',version='5.0.0',lifespan=lifespan,docs_url=None)
+app=FastAPI(title='Atas V5',version=get_version(),lifespan=lifespan,docs_url=None)
 app.mount('/static',StaticFiles(directory=str(ROOT/'app'/'static')),name='static')
 
 @app.middleware('http')

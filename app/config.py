@@ -33,11 +33,16 @@ class Settings(BaseSettings):
     sap_timeout_seconds:int=30
 
     @property
-    def log_path(self): return (BASE_DIR/self.log_dir).resolve()
+    def log_path(self) -> Path:
+        return (BASE_DIR / self.log_dir).resolve()
+
     @property
-    def data_path(self): return (BASE_DIR/self.data_dir).resolve()
+    def data_path(self) -> Path:
+        return (BASE_DIR / self.data_dir).resolve()
+
     @property
-    def db_path(self): return (BASE_DIR/self.database_file).resolve()
+    def db_path(self) -> Path:
+        return (BASE_DIR / self.database_file).resolve()
 
 def _migrate_legacy_db(settings:Settings)->Settings:
     """Migrate the historical V5 SQLite filename without discarding user data.
@@ -74,5 +79,6 @@ def _migrate_legacy_db(settings:Settings)->Settings:
     return settings
 
 @lru_cache
-def get_settings():
+def get_settings() -> Settings:
+    """Return the cached, migrated application settings."""
     return _migrate_legacy_db(Settings())

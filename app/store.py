@@ -298,14 +298,26 @@ class Store:
         with self.conn() as con:
             con.execute("DELETE FROM companies WHERE id=?", (company_id,))
 
-    def get_settings(self) -> dict[str,str]:
+    def get_settings(self) -> dict[str, str]:
+        """Return the persisted runtime configuration as plain strings."""
         with self.conn() as con:
-            return {r["key"]: r["value"] for r in con.execute("SELECT key,value FROM app_settings")}
+            return {
+                r["key"]: r["value"]
+                for r in con.execute("SELECT key,value FROM app_settings")
+            }
 
-    def set_settings(self, values: dict[str,str]) -> None:
+    def set_settings(self, values: dict[str, str]) -> None:
+        """Upsert runtime settings using one timestamp for the whole operation."""
+        updated_at = self.now()
         with self.conn() as con:
-            for k,v in values.items():
-                con.execute("INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at", (k,str(v),self.now()))
+            con.executemany(
+                """INSERT INTO app_settings(key,value,updated_at)
+                   VALUES(?,?,?)
+                   ON CONFLICT(key) DO UPDATE SET
+                     value=excluded.value,
+                     updated_at=excluded.updated_at""",
+                [(key, str(value), updated_at) for key, value in values.items()],
+            )
 
     def add_transaction(self, row: dict) -> int:
         fields = ["occurred_at","company_id","company_db","company_name","environment","currency","primary_bank","secondary_bank","sap_before","bank_rate","sap_after","decision","status","verified","error","details_json"]
@@ -390,7 +402,25 @@ class Store:
         with self.conn() as con:
             con.execute("UPDATE bank_sources SET last_status=?,last_error=?,last_checked_at=?,updated_at=? WHERE id=?",('OK' if ok else 'ERROR','' if ok else message[:500],self.now(),self.now(),source_id))
 
-    def cleanup(self, days:int) -> None:
-        cutoff=(datetime.now(ZoneInfo(self.timezone))-timedelta(days=days)).isoformat()
+    def cleanup(self, days: int) -> dict[str, int]:
+        """Delete expired operational history and return deletion counts.
+
+        The retention setting applies to both transaction audit rows and legacy
+        bank_checks. Keeping both tables bounded prevents a long-running local
+        installation from growing indefinitely while preserving the configured
+        number of days of evidence.
+        """
+        retention_days = max(1, int(days))
+        cutoff = (
+            datetime.now(ZoneInfo(self.timezone)) - timedelta(days=retention_days)
+        ).isoformat()
         with self.conn() as con:
-            con.execute("DELETE FROM bank_checks WHERE checked_at<?",(cutoff,))
+            tx = con.execute(
+                "DELETE FROM transactions WHERE occurred_at<?",
+                (cutoff,),
+            ).rowcount
+            checks = con.execute(
+                "DELETE FROM bank_checks WHERE checked_at<?",
+                (cutoff,),
+            ).rowcount
+        return {"transactions": tx, "bank_checks": checks}
