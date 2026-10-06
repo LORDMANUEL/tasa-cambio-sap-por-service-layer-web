@@ -32,3 +32,30 @@ El backup debe tratarse como información sensible. Puede incluir configuración
 ## Restauración
 
 La restauración automática en caliente no está habilitada. La aplicación debe detenerse antes de reemplazar la base o material criptográfico. La restauración controlada/offline se incorporará como siguiente etapa.
+
+
+## Restauración offline de SQLite
+
+La restauración de la base está disponible mediante:
+
+```bash
+python -m scripts.restore_backup RUTA/atas-backup-AAAAMMDD-HHMMSS.zip --yes
+```
+
+Antes de restaurar:
+
+1. detener Atas;
+2. conservar una copia externa del ZIP;
+3. ejecutar el comando con el mismo usuario de la instalación.
+
+El restaurador:
+
+1. valida estructura, SHA-256 e integridad del ZIP;
+2. comprueba que `http://127.0.0.1:<puerto>/health` no esté respondiendo como Atas;
+3. crea un backup preventivo de la base actual en `data/backups/pre-restore/`;
+4. valida la base candidata;
+5. reemplaza `atas.db` de forma atómica;
+6. ejecuta `PRAGMA integrity_check` sobre la base restaurada;
+7. si falla, revierte automáticamente a la base anterior.
+
+Esta etapa restaura solamente SQLite. `.env` y material criptográfico siguen requiriendo un procedimiento separado y explícito.
