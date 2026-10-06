@@ -953,3 +953,17 @@ def test_settings_backup_route_creates_verified_archive(monkeypatch,tmp_path):
     assert r.status_code==200
     assert 'Backup verificado' in r.text
     assert created['path']==st.path
+
+
+def test_restore_tooling_is_packaged():
+    from app.config import BASE_DIR
+    required=[
+        'scripts/restore_backup.py',
+        'scripts/windows/restore-atas.cmd',
+        'packaging/debian/atas-restore',
+    ]
+    assert all((BASE_DIR/p).exists() for p in required)
+    deb=(BASE_DIR/'scripts/build_deb.sh').read_text(encoding='utf-8')
+    iss=(BASE_DIR/'installer/windows/Atas.iss').read_text(encoding='utf-8')
+    assert 'atas-restore' in deb
+    assert 'restore-atas.cmd' in iss

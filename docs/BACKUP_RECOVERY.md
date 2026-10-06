@@ -59,3 +59,24 @@ El restaurador:
 7. si falla, revierte automáticamente a la base anterior.
 
 Esta etapa restaura solamente SQLite. `.env` y material criptográfico siguen requiriendo un procedimiento separado y explícito.
+
+
+### Windows
+
+Cierre Atas y ejecute:
+
+```bat
+scripts\windows\restore-atas.cmd "C:\Backups\atas-backup-AAAAMMDD-HHMMSS.zip"
+```
+
+El instalador también agrega **Restaurar backup de Atas** al grupo de accesos directos.
+
+### Debian / Ubuntu
+
+```bash
+sudo systemctl stop atas
+sudo atas-restore /ruta/atas-backup-AAAAMMDD-HHMMSS.zip
+sudo systemctl start atas
+```
+
+`atas-restore` se niega a continuar si `atas.service` continúa activo.

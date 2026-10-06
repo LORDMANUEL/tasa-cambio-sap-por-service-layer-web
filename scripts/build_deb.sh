@@ -19,7 +19,8 @@ rsync -a --exclude '.git' --exclude '.github' --exclude '.venv' --exclude '.env'
 cp "$ROOT/packaging/debian/atas.service" "$BUILD/lib/systemd/system/"
 cp "$ROOT/packaging/debian/atas.desktop" "$BUILD/usr/share/applications/"
 cp "$ROOT/packaging/debian/atas" "$BUILD/usr/bin/"
-chmod 0755 "$BUILD/usr/bin/atas"
+cp "$ROOT/packaging/debian/atas-restore" "$BUILD/usr/bin/"
+chmod 0755 "$BUILD/usr/bin/atas" "$BUILD/usr/bin/atas-restore"
 
 mkdir -p "$OUT"
 dpkg-deb --root-owner-group --build "$BUILD" "$OUT/atas_${VERSION}_${ARCH}.deb"

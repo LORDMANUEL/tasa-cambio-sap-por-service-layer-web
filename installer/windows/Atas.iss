@@ -33,6 +33,7 @@ WizardStyle=modern
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
 Name: "{group}\Atas"; Filename: "{app}\scripts\windows\start-atas.cmd"; WorkingDir: "{app}"
+Name: "{group}\Restaurar backup de Atas"; Filename: "{app}\scripts\windows\restore-atas.cmd"; WorkingDir: "{app}"
 Name: "{autodesktop}\Atas"; Filename: "{app}\scripts\windows\start-atas.cmd"; WorkingDir: "{app}"; Tasks: desktopicon
 Name: "{group}\GitHub de LORDMANUEL"; Filename: "https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web"
 [Tasks]

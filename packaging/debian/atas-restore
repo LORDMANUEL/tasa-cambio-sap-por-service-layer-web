@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+if [ "$#" -ne 1 ]; then
+  echo "Uso: sudo atas-restore /ruta/atas-backup-AAAAMMDD-HHMMSS.zip"
+  echo "Detenga primero el servicio: sudo systemctl stop atas"
+  exit 2
+fi
+if systemctl is-active --quiet atas.service; then
+  echo "RESTORE_FAILED: Atas sigue activo. Ejecute: sudo systemctl stop atas"
+  exit 1
+fi
+cd /opt/atas
+exec /opt/atas/.venv/bin/python -m scripts.restore_backup "$1" --yes
