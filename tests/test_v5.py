@@ -661,6 +661,7 @@ def test_legacy_noop_settings_removed():
 def test_reconcile_match_never_writes_same_rate_again(monkeypatch):
     import app.sync_engine as se
     from app.config import Settings
+    from app.credential_store import encrypt_secret
     from types import SimpleNamespace
 
     class FakeSap:
