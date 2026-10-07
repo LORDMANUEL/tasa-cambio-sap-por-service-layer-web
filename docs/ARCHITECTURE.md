@@ -5,6 +5,7 @@ Atas se divide progresivamente en piezas pequeñas para reducir el riesgo de cam
 ## Capas actuales
 
 - `app/main.py`: ensamblaje FastAPI y rutas todavía no extraídas.
+- `app/routes/auth.py`: login, creación de sesión y logout.
 - `app/runtime_config.py`: escritura de configuración local y normalización de Service Layer.
 - `app/scheduler_runtime.py`: ciclo de vida del scheduler de fondo.
 - `app/sync_engine.py`: política de reconciliación banco/SAP.

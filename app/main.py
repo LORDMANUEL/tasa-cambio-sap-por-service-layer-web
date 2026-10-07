@@ -30,6 +30,7 @@ from app.backup_manager import create_backup, BackupError
 from app.setup_validation import require_currency_source_coverage
 from app.runtime_config import set_env_value, service_layer_endpoint, effective_company_endpoint
 from app.scheduler_runtime import SchedulerService
+from app.routes.auth import create_auth_router
 
 settings=get_settings(); configure_logging(settings); log=logging.getLogger(__name__)
 store=Store(settings.db_path,settings.timezone)
@@ -76,6 +77,7 @@ async def lifespan(app):
         scheduler_service.stop()
 
 app=FastAPI(title='Atas V5',version=get_version(),lifespan=lifespan,docs_url=None)
+app.include_router(create_auth_router(settings,_setup_complete,_org,_logo_url))
 app.mount('/static',StaticFiles(directory=str(ROOT/'app'/'static')),name='static')
 
 @app.middleware('http')
@@ -241,24 +243,6 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
     except Exception as exc:
         log.exception('Initial setup failed')
         return HTMLResponse(_setup_page(str(exc)),400)
-
-# ---------------------------------------------------------------------------
-# Login/session
-# ---------------------------------------------------------------------------
-@app.get('/login',response_class=HTMLResponse)
-def login_page():
-    if not _setup_complete(): return RedirectResponse('/setup',303)
-    org=_org(); logo=_logo_url(); brand=f"<img class='login-org-logo' src='{esc(logo)}'>" if logo else "<div class='brand-mark xl'>FX</div>"
-    return HTMLResponse(f"""<!doctype html><html lang='es' data-theme='dark'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Atas · Acceso</title><link rel='stylesheet' href='/static/styles.css'><script src='/static/app.js' defer></script></head><body><div class='login-v5'><section class='login-visual'>{brand}<div><div class='eyebrow'>SAP BUSINESS ONE · DAILY FX</div><h1>Control de tasas simple, visual y trazable.</h1><p>{esc(org)}</p></div><div class='login-flow'><span>Banco</span><i>→</i><span>Validación</span><i>→</i><span>SAP</span><i>→</i><span>Auditoría</span></div></section><section class='login-form-wrap'><form method='post' class='login-card v5'><div class='eyebrow'>ACCESO LOCAL</div><h2>Bienvenido</h2><p class='muted'>Ingresa para administrar tasas y automatizaciones.</p><label>Usuario</label><input name='user' autocomplete='username' required><label>Contraseña</label><input type='password' name='password' autocomplete='current-password' required><button class='btn primary xl'>Ingresar →</button><small>Panel local · secretos cifrados por el sistema operativo</small></form></section></div></body></html>""")
-
-@app.post('/login')
-async def login(req:Request):
-    if not _setup_complete(): return RedirectResponse('/setup',303)
-    f=await req.form(); user=str(f.get('user','')); pwd=str(f.get('password',''))
-    if user!=settings.web_admin_user or not verify_password(pwd,settings.web_admin_password_hash): return HTMLResponse('Credenciales inválidas',401)
-    r=RedirectResponse('/',303); r.set_cookie(COOKIE,sign_session(user,settings.web_session_secret),httponly=True,samesite='strict',secure=False,max_age=28800); return r
-@app.get('/logout')
-def logout(): r=RedirectResponse('/login',303); r.delete_cookie(COOKIE); return r
 
 # ---------------------------------------------------------------------------
 # Dashboard
