@@ -743,6 +743,7 @@ def test_scheduled_reconcile_waits_when_official_rate_equals_previous_day(monkey
             official_rates={'USD':Decimal('27.0200')},
         )
         monkeypatch.setattr(se,'_comparison',lambda settings,store,row:fake)
+        monkeypatch.setattr(se,'_same_rate_window_closed',lambda settings,store,row:False)
         monkeypatch.setattr(se,'SapFxClient',FailIfSapUsed)
 
         result=se.reconcile_company(Settings(),st,cid,scheduled=True)
@@ -797,14 +798,21 @@ def test_manual_reconcile_is_not_blocked_by_same_previous_day_rate(monkeypatch):
         assert FakeSap.writes
 
 
-def test_scheduler_releases_claim_and_waits_one_hour(monkeypatch):
+def test_scheduler_releases_claim_and_waits_twenty_minutes(monkeypatch):
     import app.sync_engine as se
     from app.config import Settings
+    from datetime import datetime as RealDateTime
+    from zoneinfo import ZoneInfo
+
+    class FixedDateTime(RealDateTime):
+        @classmethod
+        def now(cls,tz=None):
+            return cls(2026,10,7,6,0,tzinfo=ZoneInfo('America/Tegucigalpa'))
 
     with tempfile.TemporaryDirectory() as d:
         st=Store(Path(d)/'retry.db')
-        cid=add_company(st,auto_enabled=True,scheduled_write=True,schedule_hour=0,schedule_minute=0)
-
+        cid=add_company(st,auto_enabled=True,scheduled_write=True,schedule_hour=6,schedule_minute=0)
+        monkeypatch.setattr(se,'datetime',FixedDateTime)
         monkeypatch.setattr(
             se,
             'reconcile_company',
@@ -821,7 +829,7 @@ def test_scheduler_releases_claim_and_waits_one_hour(monkeypatch):
         row=st.get_company(cid)
         assert row['scheduler_claim_date'] is None
         assert row['last_run_status']=='WAITING_BANK_UPDATE'
-        assert row['scheduler_next_retry_at']
+        assert row['scheduler_next_retry_at'].startswith('2026-10-07T06:20:00')
         assert row['scheduler_retry_count']==1
 
         second=se.run_due_schedules(Settings(),st)
