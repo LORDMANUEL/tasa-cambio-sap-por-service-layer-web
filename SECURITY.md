@@ -29,3 +29,24 @@ No publique una vulnerabilidad con secretos, credenciales o información de clie
 ## Límites
 
 La existencia de controles de seguridad, pruebas o CI no constituye garantía de seguridad absoluta. Cada despliegue debe someterse a la política de seguridad y gestión de cambios de la organización que lo opera.
+
+
+## Escaneo preventivo de secretos
+
+El repositorio ejecuta `.github/workflows/security.yml` en cada push y pull request a `main`.
+
+El scanner revisa:
+
+- árbol de trabajo actual;
+- todos los blobs alcanzables del historial Git;
+- claves privadas PEM/OpenSSH;
+- formatos conocidos de tokens GitHub, AWS, Slack y Stripe;
+- asignaciones literales de credenciales en código de aplicación.
+
+Los fixtures bajo `tests/` se excluyen únicamente de la regla genérica de asignación literal; los patrones de tokens reales y claves privadas siguen bloqueándose también dentro de pruebas.
+
+Ejecutar localmente:
+
+```bash
+python scripts/security/scan_secrets.py --history
+```
