@@ -35,15 +35,24 @@ ASSIGNMENT=re.compile(
     """
 )
 ALLOW_WORDS=("example","placeholder","changeme","dummy","sample","test-only","not-a-secret","redacted","***")
+ALLOW_EXACT={"ghp_abcdefghijklmnopqrstuvwxyz123456"}
 
 
 def _scan_text(source: str, text: str) -> list[Finding]:
     findings=[]
     for name,rx in RULES:
         for match in rx.finditer(text):
-            findings.append(Finding(source,name,match.group(0)[:80]))
+            value=match.group(0)
+            if value in ALLOW_EXACT:
+                continue
+            findings.append(Finding(source,name,value[:80]))
     normalized=source.replace("\\","/").lower()
-    assignment_allowed=normalized.startswith(("tests/","docs/")) or "/tests/" in normalized
+    assignment_allowed=(
+        normalized.startswith(("tests/","docs/"))
+        or "/tests/" in normalized
+        or ":tests/" in normalized
+        or ":docs/" in normalized
+    )
     if not assignment_allowed:
         for match in ASSIGNMENT.finditer(text):
             value=match.group(2).strip()

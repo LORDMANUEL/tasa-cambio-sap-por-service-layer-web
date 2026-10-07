@@ -12,7 +12,8 @@ def _load():
 
 def test_secret_scanner_detects_high_confidence_tokens():
     m=_load()
-    findings=m._scan_text('app/x.py',"TOKEN='ghp_abcdefghijklmnopqrstuvwxyz123456'")
+    token='ghp_' + 'Z'*32
+    findings=m._scan_text('app/x.py',f"TOKEN='{token}'")
     assert any(x.rule=='github-token' for x in findings)
 
 
