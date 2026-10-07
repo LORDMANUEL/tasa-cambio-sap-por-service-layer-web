@@ -26,11 +26,11 @@ from app.market_sources import fetch_source, scan_source, validate_snapshot_pair
 from app.sync_engine import inspect_company, write_suggested_manual, run_due_schedules, reconcile_company, _run_status
 from app.notifications import send_email, send_run_summary, recipients_from_text
 from app.version import get_version
-from app.backup_manager import create_backup, BackupError
 from app.setup_validation import require_currency_source_coverage
 from app.runtime_config import set_env_value, service_layer_endpoint, effective_company_endpoint
 from app.scheduler_runtime import SchedulerService
 from app.routes.auth import create_auth_router
+from app.routes.backup import create_backup_router
 
 settings=get_settings(); configure_logging(settings); log=logging.getLogger(__name__)
 store=Store(settings.db_path,settings.timezone)
@@ -78,6 +78,7 @@ async def lifespan(app):
 
 app=FastAPI(title='Atas V5',version=get_version(),lifespan=lifespan,docs_url=None)
 app.include_router(create_auth_router(settings,_setup_complete,_org,_logo_url))
+app.include_router(create_backup_router(settings,store,_authed,_redirect_login,_ui))
 app.mount('/static',StaticFiles(directory=str(ROOT/'app'/'static')),name='static')
 
 @app.middleware('http')
@@ -491,16 +492,6 @@ def settings_page(req:Request):
 <form class='card' method='post' action='/settings/backup' data-process='Creando backup verificado'><div class='section-title'><h2>Backup e integridad</h2><span class='pill'>Local</span></div><p class='muted'>Genera un snapshot consistente de SQLite, verifica SHA-256 e integridad y guarda el ZIP localmente. El archivo es sensible.</p><button class='btn primary'>Crear backup ahora</button></form>
 <form class='card' method='post' action='/settings/notifications' data-process='Guardando notificaciones'><div class='section-title'><h2>Notificaciones de salida</h2>{badge('ACTIVAS' if notif else 'OPCIONALES')}</div><label class='switchline'><input type='checkbox' name='notifications_enabled' {'checked' if notif else ''}> Habilitar correo saliente</label><div class='form-grid cols2'><div><label>SMTP</label><input name='smtp_host' value='{esc(c.get('smtp_host',''))}'></div><div><label>Puerto</label><input name='smtp_port' value='{esc(c.get('smtp_port','587'))}'></div><div><label>Seguridad</label><select name='smtp_security'><option {'selected' if c.get('smtp_security')=='STARTTLS' else ''}>STARTTLS</option><option {'selected' if c.get('smtp_security')=='SSL' else ''}>SSL</option><option {'selected' if c.get('smtp_security')=='NONE' else ''}>NONE</option></select></div><div><label>Usuario / cuenta</label><input name='smtp_user' value='{esc(c.get('smtp_user',''))}'></div><div><label>Remitente</label><input name='smtp_from' value='{esc(c.get('smtp_from',''))}'></div><div><label>Nueva clave/App Password</label><input type='password' name='smtp_password' placeholder='Vacío = conservar'></div><div class='span2'><label>Destinatarios</label><input name='notification_recipients' value='{esc(recipients)}'></div></div><div class='actions'><button class='btn primary'>Guardar correo</button><button class='btn secondary' formaction='/settings/notifications/test'>Enviar prueba</button></div></form><form class='card' method='post' action='/settings/admin' data-process='Actualizando administrador web'><div class='section-title'><h2>Administrador web</h2><span class='pill'>Local</span></div><p class='muted'>Cambia el usuario y contraseña usados para entrar al panel.</p><div class='form-grid cols2'><div><label>Usuario actual</label><input value='{esc(settings.web_admin_user)}' disabled></div><div><label>Contraseña actual</label><input type='password' name='current_password' required></div><div><label>Nuevo usuario</label><input name='new_user' value='{esc(settings.web_admin_user)}' required></div><div><label>Nueva contraseña</label><input type='password' name='new_password' minlength='6' required></div></div><button class='btn primary'>Actualizar administrador</button></form></div>"""
     return HTMLResponse(_ui('Configuración',body))
-
-@app.post('/settings/backup',response_class=HTMLResponse)
-def settings_backup(req:Request):
-    if not _authed(req):
-        return _redirect_login()
-    try:
-        result=create_backup(settings,store.path)
-    except BackupError as exc:
-        return HTMLResponse(_ui('Backup',f"<div class='card error-panel'><h2>Backup fallido</h2><p>{esc(exc)}</p><a class='btn' href='/settings'>Volver</a></div>"),500)
-    return HTMLResponse(_ui('Backup',f"<div class='card success-panel'><h2>Backup verificado</h2><p><b>{esc(result['name'])}</b></p><p>SHA-256: <code>{esc(result['sha256'])}</code></p><p>Guardado en <code>{esc(result['path'])}</code>.</p><p class='muted'>Contiene información sensible. No lo publique ni lo adjunte a tickets.</p><a class='btn primary' href='/settings'>Volver</a></div>"))
 
 @app.post('/settings/general')
 async def settings_general(req:Request, logo:UploadFile|None=File(default=None)):

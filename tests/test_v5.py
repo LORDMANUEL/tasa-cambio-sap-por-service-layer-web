@@ -922,7 +922,8 @@ def test_settings_backup_route_creates_verified_archive(monkeypatch,tmp_path):
         created['path']=path
         return {'name':'atas-backup-test.zip','path':str(tmp_path/'atas-backup-test.zip'),'sha256':'a'*64}
 
-    monkeypatch.setattr(m,'create_backup',fake_backup)
+    import app.routes.backup as backup_routes
+    monkeypatch.setattr(backup_routes,'create_backup',fake_backup)
     client=TestClient(m.app)
     login=client.post('/login',data={'user':'admin','password':'admin123'},follow_redirects=False)
     cookie=login.cookies.get(m.COOKIE)
