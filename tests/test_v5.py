@@ -997,3 +997,21 @@ def test_same_rate_window_stays_open_before_7am(monkeypatch,tmp_path):
 
     monkeypatch.setattr(se,'datetime',FixedDateTime)
     assert se._same_rate_window_closed(Settings(),st,st.get_company(cid)) is False
+
+
+def test_new_setup_defaults_to_usd_and_three_honduras_sources(monkeypatch):
+    import app.main as m
+    html=m._setup_page()
+    assert "name='currencies_csv' value='USD'" in html
+    assert "name='source_code' value='BANPAIS'" in html
+    assert "name='source_code' value='FICOHSA'" in html
+    assert "name='source_code' value='BCH'" in html
+    assert '{"preset":"BCH"}' in html
+
+
+def test_new_company_form_defaults_to_usd(monkeypatch,tmp_path):
+    import app.main as m
+    st=Store(tmp_path/'company-default.db')
+    monkeypatch.setattr(m,'store',st)
+    html=m._company_form({})
+    assert "name='currencies_csv' value='USD'" in html

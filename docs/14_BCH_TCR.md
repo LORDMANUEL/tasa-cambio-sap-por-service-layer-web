@@ -49,3 +49,16 @@ Ejemplo:
 - BCH: USD
 
 Esta combinación permite consenso de USD, pero no de EUR. Si se selecciona USD,EUR, Atas exige una tercera fuente real de EUR antes de completar el setup.
+
+
+## Defaults de una instalación nueva
+
+Para Honduras, el asistente inicial propone:
+
+- Banpaís;
+- Ficohsa;
+- BCH;
+- moneda inicial: USD;
+- fuente oficial inicial: Banpaís.
+
+Estos valores son editables. Una instalación para otra empresa puede reemplazar la fuente oficial, agregar/quitar fuentes y configurar otras monedas. BCH sigue siendo una referencia de consenso USD y no reemplaza la fuente comercial seleccionada.
