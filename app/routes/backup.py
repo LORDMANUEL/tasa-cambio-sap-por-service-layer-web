@@ -8,7 +8,7 @@ from app.backup_manager import BackupError, create_backup
 from app.dashboard import esc
 
 
-def create_backup_router(settings, store, authed, redirect_login, ui) -> APIRouter:
+def create_backup_router(settings, store_provider, authed, redirect_login, ui) -> APIRouter:
     """Build backup routes without coupling them to app.main globals."""
     router=APIRouter()
 
@@ -17,6 +17,7 @@ def create_backup_router(settings, store, authed, redirect_login, ui) -> APIRout
         if not authed(req):
             return redirect_login()
         try:
+            store=store_provider()
             result=create_backup(settings,store.path)
         except BackupError as exc:
             return HTMLResponse(

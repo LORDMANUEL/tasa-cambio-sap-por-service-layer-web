@@ -1016,3 +1016,31 @@ def test_new_company_form_defaults_to_usd(monkeypatch,tmp_path):
     monkeypatch.setattr(m,'store',st)
     html=m._company_form({})
     assert "name='currencies_csv' value='USD'" in html
+
+
+def test_backup_router_resolves_store_lazily(monkeypatch,tmp_path):
+    import app.main as m
+    import app.routes.backup as backup_routes
+    from fastapi.testclient import TestClient
+
+    first=Store(tmp_path/'first.db')
+    second=Store(tmp_path/'second.db')
+    first.set_settings({'setup_complete':'true','organization_name':'Demo'})
+    second.set_settings({'setup_complete':'true','organization_name':'Demo'})
+    monkeypatch.setattr(m,'store',second)
+    m.settings.web_admin_user='admin'
+    m.settings.web_admin_password_hash=m.password_hash('admin123')
+    m.settings.web_session_secret='q'*48
+
+    seen={}
+    def fake_backup(settings,path):
+        seen['path']=path
+        return {'name':'lazy.zip','path':str(tmp_path/'lazy.zip'),'sha256':'b'*64}
+
+    monkeypatch.setattr(backup_routes,'create_backup',fake_backup)
+    client=TestClient(m.app)
+    login=client.post('/login',data={'user':'admin','password':'admin123'},follow_redirects=False)
+    cookie=login.cookies.get(m.COOKIE)
+    r=client.post('/settings/backup',headers={'cookie':f'{m.COOKIE}={cookie}'})
+    assert r.status_code==200
+    assert seen['path']==second.path

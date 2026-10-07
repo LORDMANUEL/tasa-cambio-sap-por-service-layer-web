@@ -78,7 +78,7 @@ async def lifespan(app):
 
 app=FastAPI(title='Atas V5',version=get_version(),lifespan=lifespan,docs_url=None)
 app.include_router(create_auth_router(settings,_setup_complete,_org,_logo_url))
-app.include_router(create_backup_router(settings,store,_authed,_redirect_login,_ui))
+app.include_router(create_backup_router(settings,lambda: store,_authed,_redirect_login,_ui))
 app.mount('/static',StaticFiles(directory=str(ROOT/'app'/'static')),name='static')
 
 @app.middleware('http')
