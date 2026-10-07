@@ -6,7 +6,7 @@ per-company Service Layer overrides, optional outgoing email notifications and
 custom branding.
 """
 from __future__ import annotations
-import csv, io, logging, os, re, threading, time, secrets
+import csv, io, logging, os, re, time, secrets
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -28,12 +28,13 @@ from app.notifications import send_email, send_run_summary, recipients_from_text
 from app.version import get_version
 from app.backup_manager import create_backup, BackupError
 from app.setup_validation import require_currency_source_coverage
+from app.runtime_config import set_env_value, service_layer_endpoint, effective_company_endpoint
+from app.scheduler_runtime import SchedulerService
 
 settings=get_settings(); configure_logging(settings); log=logging.getLogger(__name__)
 store=Store(settings.db_path,settings.timezone)
 ROOT=Path(__file__).resolve().parent.parent
 UPLOAD_DIR=ROOT/'app'/'static'/'uploads'; UPLOAD_DIR.mkdir(parents=True,exist_ok=True)
-_stop=threading.Event(); _thread=None
 
 
 def _authed(req:Request): return verify_session(req.cookies.get(COOKIE),settings.web_session_secret,settings.web_admin_user)
@@ -45,20 +46,13 @@ def _logo_url(): return _cfg().get('organization_logo','')
 def _ui(title, body): return layout(title,body,organization=_org(),logo_url=_logo_url())
 
 def _set_env_value(key:str,value:str)->None:
-    env=ROOT/'.env'; lines=env.read_text(encoding='utf-8').splitlines() if env.exists() else []; out=[]; found=False
-    for line in lines:
-        if line.startswith(key+'='): out.append(f'{key}={value}'); found=True
-        else: out.append(line)
-    if not found: out.append(f'{key}={value}')
-    env.write_text('\n'.join(out)+'\n',encoding='utf-8')
+    set_env_value(ROOT,key,value)
 
 def _endpoint(root:str, version:str)->str:
-    root=re.sub(r'/v\d+$','',str(root or '').strip().rstrip('/'),flags=re.I)
-    version=(version or 'v2').strip().lower()
-    return f'{root}/{version}' if root else ''
+    return service_layer_endpoint(root,version)
 
 def _effective_company_endpoint(c:dict)->str:
-    cfg=_cfg(); return _endpoint(c.get('service_layer_root') or cfg.get('service_layer_root',''), c.get('odata_version') or cfg.get('odata_version','v2'))
+    return effective_company_endpoint(c,_cfg())
 
 def _save_logo(upload:UploadFile|None)->str:
     if not upload or not upload.filename: return ''
@@ -71,22 +65,15 @@ def _save_logo(upload:UploadFile|None)->str:
     (UPLOAD_DIR/name).write_bytes(data)
     return '/static/uploads/'+name
 
-def _scheduler_loop():
-    while not _stop.wait(30):
-        try:
-            results=run_due_schedules(settings,store)
-            if results:
-                log.info('V5 scheduler executed companies=%s',len(results))
-                send_run_summary(store,results)
-            store.cleanup(int(_cfg().get('log_retention_days','30')))
-        except Exception: log.exception('V5 scheduler failed')
+scheduler_service=SchedulerService(settings,store,_cfg,send_run_summary,log)
 
 @asynccontextmanager
 async def lifespan(app):
-    global _thread
-    _stop.clear(); _thread=threading.Thread(target=_scheduler_loop,name='sap-fx-v5-scheduler',daemon=True); _thread.start(); yield
-    _stop.set()
-    if _thread and _thread.is_alive(): _thread.join(timeout=2)
+    scheduler_service.start()
+    try:
+        yield
+    finally:
+        scheduler_service.stop()
 
 app=FastAPI(title='Atas V5',version=get_version(),lifespan=lifespan,docs_url=None)
 app.mount('/static',StaticFiles(directory=str(ROOT/'app'/'static')),name='static')
