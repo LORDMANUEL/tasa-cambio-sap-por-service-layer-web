@@ -80,3 +80,24 @@ sudo systemctl start atas
 ```
 
 `atas-restore` se niega a continuar si `atas.service` continúa activo.
+
+
+## Recuperación de credenciales y configuración
+
+El restaurador puede validar todas las credenciales cifradas después de recuperar SQLite:
+
+- contraseña SAP por CompanyDB;
+- headers secretos de fuentes/API;
+- contraseña SMTP.
+
+Nunca imprime el valor descifrado. El resultado sólo indica si cada secreto es recuperable o debe reingresarse.
+
+Para restaurar también la configuración:
+
+```bash
+python -m scripts.restore_backup BACKUP.zip --yes --with-config
+```
+
+En Linux, `--with-config` restaura `app.env` y `credential.key` cuando el backup los contiene. La clave Fernet se guarda con permisos 0600.
+
+En Windows, DPAPI está asociado al contexto de Windows que cifró las credenciales. No existe una clave portable en el ZIP. Si el backup se mueve a otra máquina o usuario y DPAPI no puede descifrar, el comando termina indicando `REENTER=...` para cada credencial que debe introducirse de nuevo. La base y la auditoría permanecen restauradas.

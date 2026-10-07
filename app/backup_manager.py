@@ -70,7 +70,18 @@ def create_backup(settings: Settings, db_path: Path, *, backup_dir: Path|None=No
         files={"database":"atas.db"}
         if env.exists(): files["environment"]="app.env"
         if key: files["credential_key"]="credential.key"
-        manifest={"product":"Atas","version":get_version(),"created_at":datetime.now(ZoneInfo(settings.timezone)).isoformat(),"timezone":settings.timezone,"database_sha256":_sha256(snapshot),"database_integrity":"ok","files":files,"warning":"SENSITIVE_BACKUP_CONTAINS_CONFIGURATION_AND_ENCRYPTED_CREDENTIAL_MATERIAL"}
+        manifest={
+            "product":"Atas",
+            "version":get_version(),
+            "created_at":datetime.now(ZoneInfo(settings.timezone)).isoformat(),
+            "timezone":settings.timezone,
+            "database_sha256":_sha256(snapshot),
+            "database_integrity":"ok",
+            "files":files,
+            "credential_scheme":"DPAPI" if os.name=="nt" else "FERNET",
+            "credential_portable":bool(key) if os.name!="nt" else False,
+            "warning":"SENSITIVE_BACKUP_CONTAINS_CONFIGURATION_AND_ENCRYPTED_CREDENTIAL_MATERIAL",
+        }
         (temp/"manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding="utf-8")
         with zipfile.ZipFile(archive,"w",compression=zipfile.ZIP_DEFLATED) as zf:
             zf.write(snapshot,"atas.db"); zf.write(temp/"manifest.json","manifest.json")
