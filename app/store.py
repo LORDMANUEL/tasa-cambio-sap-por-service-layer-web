@@ -211,7 +211,8 @@ class Store:
                 "min_market_sources": "3",
                 "max_source_deviation_percent": "2.0",
                 "max_pair_spread_percent": "35.0",
-                "max_same_rate_retries": "3",
+                "same_rate_retry_minutes": "20",
+                "same_rate_validation_window_minutes": "60",
             }
             for k, v in defaults.items():
                 con.execute("INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES(?,?,?)", (k, v, self.now()))

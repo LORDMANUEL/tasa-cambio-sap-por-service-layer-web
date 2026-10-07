@@ -119,3 +119,31 @@ La pantalla de Automatización muestra, cuando aplica:
 - estado `WAITING_BANK_UPDATE`.
 
 Esto permite a Contabilidad distinguir entre un fallo, una espera normal del banco y una intervención manual requerida.
+
+
+## Política definitiva de tasa repetida
+
+La política operativa multiempresa queda definida así:
+
+- cada empresa selecciona una **fuente oficial** (`primary_bank`);
+- las demás fuentes validan coherencia/consenso;
+- la tasa que se propone a SAP siempre es la tasa de venta de la fuente oficial seleccionada;
+- la fuente oficial sólo es accionable cuando supera consenso y controles de outliers;
+- cada consulta se realiza nuevamente contra las fuentes con headers `no-cache`; Atas no reutiliza una tasa bancaria guardada como respuesta de red.
+
+Si la ejecución programada inicia a las 06:00 y la tasa oficial es exactamente igual a la última observación válida anterior:
+
+1. no se escribe todavía;
+2. estado `WAITING_BANK_UPDATE`;
+3. nueva consulta a las 06:20;
+4. nueva consulta a las 06:40;
+5. nueva consulta a las 07:00;
+6. si antes de las 07:00 cambia y pasa consenso, se procesa inmediatamente;
+7. si a las 07:00 sigue idéntica pero todas las validaciones continúan correctas, se considera **tasa confirmada sin cambio** y se procesa contra SAP.
+
+Los parámetros son configurables:
+
+- `same_rate_retry_minutes=20`;
+- `same_rate_validation_window_minutes=60`.
+
+La ventana es relativa al horario configurado de cada empresa, por lo que una instalación SaaS puede usar otro horario manteniendo la misma política.

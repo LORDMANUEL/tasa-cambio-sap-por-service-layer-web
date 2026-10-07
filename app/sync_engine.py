@@ -253,6 +253,20 @@ def _manual_reconcile_write_allowed(store:Store,row:dict) -> bool:
     )
 
 
+def _same_rate_window_closed(settings: Settings, store: Store, row: dict) -> bool:
+    """Return True once the configured same-rate validation window has elapsed."""
+    cfg=store.get_settings()
+    window=max(20,int(cfg.get('same_rate_validation_window_minutes','60') or 60))
+    now=datetime.now(ZoneInfo(settings.timezone))
+    start=now.replace(
+        hour=int(row.get('schedule_hour') or 0),
+        minute=int(row.get('schedule_minute') or 0),
+        second=0,
+        microsecond=0,
+    )
+    return now >= start + timedelta(minutes=window)
+
+
 def reconcile_company(settings:Settings, store:Store, company_id:int, *, scheduled:bool=True) -> dict:
     """Execute policy reconciliation. Production writes require explicit schedule authorization."""
     row=store.get_company(company_id)
@@ -275,6 +289,8 @@ def reconcile_company(settings:Settings, store:Store, company_id:int, *, schedul
     currencies=_currencies(row)
 
     waiting={}
+    confirmed_same=set()
+    window_closed=_same_rate_window_closed(settings,store,row) if scheduled else False
     if scheduled:
         for cur in currencies:
             previous=store.previous_market_observation(
@@ -286,6 +302,13 @@ def reconcile_company(settings:Settings, store:Store, company_id:int, *, schedul
                 continue
             previous_sell=Decimal(str(previous['sell']))
             if official[cur] == previous_sell:
+                if window_closed:
+                    confirmed_same.add(cur)
+                    result['notices'].append(
+                        f"{cur}: fuente oficial mantiene la tasa anterior y fue confirmada "
+                        "tras completar la ventana de validación."
+                    )
+                    continue
                 waiting[cur]={
                     'status':'WAITING_BANK_UPDATE',
                     'bank':str(official[cur]),
@@ -311,7 +334,7 @@ def reconcile_company(settings:Settings, store:Store, company_id:int, *, schedul
         result['rates'].update(waiting)
         if waiting:
             result['retry_required']=True
-            result['retry_after_minutes']=60
+            result['retry_after_minutes']=20
 
     active_currencies=[cur for cur in currencies if cur not in waiting]
     if not active_currencies:
@@ -323,7 +346,7 @@ def reconcile_company(settings:Settings, store:Store, company_id:int, *, schedul
         with SapFxClient(sap_url,company,row['sap_user'],password,verify_tls=_sap_verify_tls(settings,store),timeout=settings.sap_timeout_seconds) as sap:
             for cur in active_currencies:
                 before=sap.get_currency_rate(cur,today); bank=official[cur]; decision=decide_rate_action(before,bank)
-                tx={'company_id':row['id'],'company_db':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'currency':cur,'primary_bank':row['primary_bank'],'secondary_bank':row['secondary_bank'],'sap_before':str(before),'bank_rate':str(bank),'decision':decision.action}
+                tx={'company_id':row['id'],'company_db':row['database_name'],'company_name':row['company_name'],'environment':row['environment'],'currency':cur,'primary_bank':row['primary_bank'],'secondary_bank':row['secondary_bank'],'sap_before':str(before),'bank_rate':str(bank),'decision':decision.action,'details_json':'same-rate-confirmed-after-validation-window' if cur in confirmed_same else None}
                 if decision.action=='MATCH':
                     tx.update(sap_after=str(before),status='MATCH',verified=1); result['rates'][cur]={'status':'MATCH','before':str(before),'after':str(before),'bank':str(bank)}
                 elif not allowed:
@@ -395,31 +418,24 @@ def run_due_schedules(settings:Settings, store:Store) -> list[dict]:
         status,message=_run_status(result)
         if result.get('retry_required'):
             cfg=store.get_settings()
-            max_retries=max(1,int(cfg.get('max_same_rate_retries','3') or 3))
-            current_retries=int(row.get('scheduler_retry_count') or 0)
-            if current_retries >= max_retries:
-                result['retry_required']=False
-                result['retry_exhausted']=True
-                exhausted_message=(
-                    f'Tasa bancaria igual al día anterior tras {current_retries} reintentos; '
-                    'requiere validación manual.'
-                )
-                store.mark_run_result(
-                    row['id'],
-                    today,
-                    'ATTENTION',
-                    exhausted_message,
-                )
-                result['attention']=exhausted_message
-            else:
-                next_retry=(now+timedelta(hours=1)).isoformat()
-                store.schedule_daily_retry(
-                    row['id'],
-                    today,
-                    next_retry,
-                    f'Tasa bancaria sin cambio respecto al día anterior; reintento {next_retry}',
-                )
-                result['next_retry_at']=next_retry
+            retry_minutes=max(5,int(cfg.get('same_rate_retry_minutes','20') or 20))
+            window_minutes=max(retry_minutes,int(cfg.get('same_rate_validation_window_minutes','60') or 60))
+            start=now.replace(
+                hour=int(row.get('schedule_hour') or 0),
+                minute=int(row.get('schedule_minute') or 0),
+                second=0,
+                microsecond=0,
+            )
+            deadline=start+timedelta(minutes=window_minutes)
+            next_retry=min(now+timedelta(minutes=retry_minutes),deadline)
+            store.schedule_daily_retry(
+                row['id'],
+                today,
+                next_retry.isoformat(),
+                f'Tasa bancaria sin cambio respecto al día anterior; reintento {next_retry.isoformat()}',
+            )
+            result['next_retry_at']=next_retry.isoformat()
+            result['validation_deadline']=deadline.isoformat()
         else:
             store.mark_run_result(row['id'],today,status,message)
         if result.get('error') and not result.get('error_recorded'):

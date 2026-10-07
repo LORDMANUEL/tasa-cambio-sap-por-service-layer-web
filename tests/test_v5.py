@@ -748,7 +748,7 @@ def test_scheduled_reconcile_waits_when_official_rate_equals_previous_day(monkey
         result=se.reconcile_company(Settings(),st,cid,scheduled=True)
 
         assert result['retry_required'] is True
-        assert result['retry_after_minutes']==60
+        assert result['retry_after_minutes']==20
         assert result['rates']['USD']['status']=='WAITING_BANK_UPDATE'
 
 
@@ -812,7 +812,7 @@ def test_scheduler_releases_claim_and_waits_one_hour(monkeypatch):
                 'company':'SBODEMO',
                 'rates':{'USD':{'status':'WAITING_BANK_UPDATE'}},
                 'retry_required':True,
-                'retry_after_minutes':60,
+                'retry_after_minutes':20,
             },
         )
 
@@ -891,44 +891,11 @@ def test_existing_database_migrates_retry_columns_without_losing_claim(tmp_path)
     assert row['scheduler_retry_count']==0
 
 
-def test_scheduler_stops_after_configured_same_rate_retries(monkeypatch):
-    import app.sync_engine as se
-    from app.config import Settings
-
-    with tempfile.TemporaryDirectory() as d:
-        st=Store(Path(d)/'retry-limit.db')
-        cid=add_company(st,auto_enabled=True,scheduled_write=True,schedule_hour=0,schedule_minute=0)
-        st.set_settings({'max_same_rate_retries':'2'})
-
-        with st.conn() as con:
-            con.execute(
-                "UPDATE companies SET scheduler_retry_count=2 WHERE id=?",
-                (cid,),
-            )
-
-        monkeypatch.setattr(
-            se,
-            'reconcile_company',
-            lambda *args,**kwargs: {
-                'company':'SBODEMO',
-                'rates':{'USD':{'status':'WAITING_BANK_UPDATE'}},
-                'retry_required':True,
-                'retry_after_minutes':60,
-            },
-        )
-
-        out=se.run_due_schedules(Settings(),st)
-        assert len(out)==1
-        assert out[0]['retry_exhausted'] is True
-        row=st.get_company(cid)
-        assert row['last_run_status']=='ATTENTION'
-        assert row['scheduler_next_retry_at'] is None
-        assert row['scheduler_retry_count']==0
-
-
-def test_notification_marks_retry_exhausted_as_attention():
-    from app.notifications import _result_needs_attention
-    assert _result_needs_attention({'retry_exhausted':True,'rates':{}})
+def test_same_rate_policy_defaults_to_20_minute_retry_and_60_minute_window(tmp_path):
+    st=Store(tmp_path/'policy.db')
+    cfg=st.get_settings()
+    assert cfg['same_rate_retry_minutes']=='20'
+    assert cfg['same_rate_validation_window_minutes']=='60'
 
 
 def test_settings_backup_route_creates_verified_archive(monkeypatch,tmp_path):
@@ -969,3 +936,56 @@ def test_restore_tooling_is_packaged():
     iss=(BASE_DIR/'installer/windows/Atas.iss').read_text(encoding='utf-8')
     assert 'atas-restore' in deb
     assert 'restore-atas.cmd' in iss
+
+
+def test_same_rate_window_accepts_validated_rate_after_deadline(monkeypatch,tmp_path):
+    import app.sync_engine as se
+    from app.config import Settings
+    from datetime import datetime as RealDateTime
+    from zoneinfo import ZoneInfo
+
+    st=Store(tmp_path/'deadline.db')
+    cid=add_company(
+        st,
+        auto_enabled=True,
+        scheduled_write=True,
+        schedule_hour=6,
+        schedule_minute=0,
+        currencies_csv='USD',
+        use_usd=True,
+        use_eur=False,
+        primary_bank='A',
+    )
+    st.record_market_snapshot(
+        observed_day='2026-10-06',
+        fetched_at='2026-10-06T06:00:00-06:00',
+        source_code='A',source_name='A',source_url='https://example.com',
+        rates={'USD':{'buy':'26.90','sell':'27.02'}},
+        raw_hash='old',
+    )
+
+    class FixedDateTime(RealDateTime):
+        @classmethod
+        def now(cls,tz=None):
+            return cls(2026,10,7,7,0,tzinfo=ZoneInfo('America/Tegucigalpa'))
+
+    monkeypatch.setattr(se,'datetime',FixedDateTime)
+    assert se._same_rate_window_closed(Settings(),st,st.get_company(cid)) is True
+
+
+def test_same_rate_window_stays_open_before_7am(monkeypatch,tmp_path):
+    import app.sync_engine as se
+    from app.config import Settings
+    from datetime import datetime as RealDateTime
+    from zoneinfo import ZoneInfo
+
+    st=Store(tmp_path/'window.db')
+    cid=add_company(st,schedule_hour=6,schedule_minute=0)
+
+    class FixedDateTime(RealDateTime):
+        @classmethod
+        def now(cls,tz=None):
+            return cls(2026,10,7,6,40,tzinfo=ZoneInfo('America/Tegucigalpa'))
+
+    monkeypatch.setattr(se,'datetime',FixedDateTime)
+    assert se._same_rate_window_closed(Settings(),st,st.get_company(cid)) is False
