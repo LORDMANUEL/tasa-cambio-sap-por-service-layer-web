@@ -1,12 +1,17 @@
 from pathlib import Path
 import importlib.util
+import sys
 
 
 def _load():
     path=Path(__file__).resolve().parents[1]/'scripts'/'security'/'scan_secrets.py'
     spec=importlib.util.spec_from_file_location('atas_secret_scan',path)
     mod=importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    sys.modules[spec.name]=mod
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.modules.pop(spec.name,None)
     return mod
 
 
