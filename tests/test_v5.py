@@ -38,7 +38,9 @@ def test_web_auth_hash_and_session():
     t=sign_session('admin','x'*40,ttl=60); assert verify_session(t,'x'*40,'admin')
 
 def test_bank_catalog_keeps_validated_automatic_connectors():
-    assert automatic_banks()==['BANPAIS','FICOHSA']
+    assert automatic_banks()==['BANPAIS','FICOHSA','BCH']
+    assert BANKS['BCH']['currencies']==['USD']
+    assert BANKS['BCH']['status']=='REFERENCIA'
     assert len(BANKS)>=16 and BANKS['BCH']['status']=='REFERENCIA'
 
 def test_recipient_list_parser():
