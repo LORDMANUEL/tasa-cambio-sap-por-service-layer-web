@@ -286,10 +286,15 @@ def fetch_source(source: dict, settings: Settings) -> SourceSnapshot:
         cfg = _normalize_config(source)
         preset = str(cfg.get("preset") or code).upper()
         r = get_provider(preset, settings).fetch()
-        rates = {
-            "USD": {"buy": Decimal(str(r.usd.buy)), "sell": Decimal(str(r.usd.sell))},
-            "EUR": {"buy": Decimal(str(r.eur.buy)), "sell": Decimal(str(r.eur.sell))},
-        }
+        if preset == "BCH":
+            rates = {
+                "USD": {"buy": Decimal(str(r.tcr)), "sell": Decimal(str(r.tcr))},
+            }
+        else:
+            rates = {
+                "USD": {"buy": Decimal(str(r.usd.buy)), "sell": Decimal(str(r.usd.sell))},
+                "EUR": {"buy": Decimal(str(r.eur.buy)), "sell": Decimal(str(r.eur.sell))},
+            }
         return SourceSnapshot(code, name, stype, r.source_url, r.fetched_at.isoformat(), rates, r.raw_hash)
 
     response = _fetch_http(source, settings)

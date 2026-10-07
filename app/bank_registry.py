@@ -19,7 +19,7 @@ BANKS = {
     "POPULAR": {"name":"Banco Popular, S.A.","automatic":False,"currencies":["USD","EUR"],"status":"PENDIENTE","note":"Sin conector público estable validado para V5.","url":""},
     "BAC": {"name":"Banco de América Central Honduras, S.A. (BAC)","automatic":False,"currencies":["USD","EUR"],"status":"PENDIENTE","note":"Cotiza divisas, pero no se ha validado un endpoint público simple y estable.","url":""},
     "BANCO_HONDURAS": {"name":"Banco de Honduras, S.A.","automatic":False,"currencies":["USD","EUR"],"status":"PENDIENTE","note":"Sin conector público estable validado para V5.","url":""},
-    "BCH": {"name":"Banco Central de Honduras","automatic":False,"currencies":["USD"],"status":"REFERENCIA","note":"Referencia oficial/regulatoria; no se usa como precio financiero principal de compra.","url":"https://www.bch.hn/"},
+    "BCH": {"name":"Banco Central de Honduras","automatic":True,"currencies":["USD"],"status":"REFERENCIA","note":"TCR oficial diario desde XLSX estructurado; fuente de referencia/consenso, no cotización comercial de compra/venta.","url":"https://www.bch.hn/operativos/INTL/Paginas/rd-resultados-diarios-tcr.aspx"},
 }
 
 def automatic_banks():
