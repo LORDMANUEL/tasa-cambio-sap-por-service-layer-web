@@ -226,3 +226,54 @@ def test_secure_bank_http_session_disables_cache():
     session=secure_session()
     assert 'no-cache' in session.headers['Cache-Control']
     assert session.headers['Pragma']=='no-cache'
+
+
+def test_html_css_mode_supports_custom_bank_pages():
+    html='<div id="usd-buy">26.9000</div><div id="usd-sell">27.0500</div>'
+    config={
+        'mode':'CSS',
+        'currencies':['USD'],
+        'mapping':{'USD':{'buy':'#usd-buy','sell':'#usd-sell'}},
+    }
+    result=_extract_html(html,config)
+    assert result['USD']['buy']==Decimal('26.9000')
+    assert result['USD']['sell']==Decimal('27.0500')
+
+
+def test_html_regex_mode_supports_custom_bank_pages():
+    html='<div>USD Compra: 26.9000 Venta: 27.0500</div>'
+    config={
+        'mode':'REGEX',
+        'currencies':['USD'],
+        'mapping':{
+            'USD':{
+                'regex':r'USD.*?Compra:\s*(?P<buy>[0-9.]+).*?Venta:\s*(?P<sell>[0-9.]+)'
+            }
+        },
+    }
+    result=_extract_html(html,config)
+    assert result['USD']['buy']==Decimal('26.9000')
+    assert result['USD']['sell']==Decimal('27.0500')
+
+
+def test_api_json_mapping_supports_custom_paths():
+    data={
+        'fx':{
+            'rates':[
+                {'currency':'USD','purchase':'26.9000','sale':'27.0500'}
+            ]
+        }
+    }
+    config={
+        'mode':'MAPPING',
+        'currencies':['USD'],
+        'mapping':{
+            'USD':{
+                'buy':'fx.rates[0].purchase',
+                'sell':'fx.rates[0].sale',
+            }
+        },
+    }
+    result=_extract_json(data,config)
+    assert result['USD']['buy']==Decimal('26.9000')
+    assert result['USD']['sell']==Decimal('27.0500')
