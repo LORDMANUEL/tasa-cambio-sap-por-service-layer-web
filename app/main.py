@@ -27,6 +27,7 @@ from app.sync_engine import inspect_company, write_suggested_manual, run_due_sch
 from app.notifications import send_email, send_run_summary, recipients_from_text
 from app.version import get_version
 from app.backup_manager import create_backup, BackupError
+from app.setup_validation import require_currency_source_coverage
 
 settings=get_settings(); configure_logging(settings); log=logging.getLogger(__name__)
 store=Store(settings.db_path,settings.timezone)
@@ -184,7 +185,9 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
 
         # Validate at least three independent market sources before enabling automation.
         scodes=form.getlist('source_code'); snames=form.getlist('source_name'); scountries=form.getlist('source_country'); stypes=form.getlist('source_type'); surls=form.getlist('source_url'); sconfigs=form.getlist('source_config'); ssecrets=form.getlist('source_secret_headers')
-        temp_sources=[]; valid_sources=[]; source_errors=[]
+        currencies_csv=str(form.get('currencies_csv','USD,EUR')).upper().replace(' ','')
+        selected_currencies=[x for x in currencies_csv.split(',') if x]
+        temp_sources=[]; valid_sources=[]; source_errors=[]; valid_snapshots={}
         for i,code in enumerate(scodes):
             src={'code':str(code).strip().upper(),'name':str(snames[i] if i<len(snames) else code).strip(),'country':str(scountries[i] if i<len(scountries) else '').strip(),'source_type':str(stypes[i] if i<len(stypes) else 'WEB_HTML').strip().upper(),'url':str(surls[i] if i<len(surls) else '').strip(),'config_json':str(sconfigs[i] if i<len(sconfigs) else '{}').strip() or '{}','headers_json':'{}','timeout_seconds':15,'tls_verify':1}
             secret=str(ssecrets[i] if i<len(ssecrets) else '').strip()
@@ -196,11 +199,13 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
                 snap=fetch_source(src,settings)
                 validate_snapshot_pairs(snap,store.get_settings().get('max_pair_spread_percent','35.0'))
                 valid_sources.append(src['code'])
+                valid_snapshots[src['code']]=snap
             except Exception as exc:
                 source_errors.append(f"{src['code']}: {exc}")
         valid_sources=list(dict.fromkeys(valid_sources))
         if len(valid_sources)<3:
             raise ValueError('Se requieren al menos 3 fuentes bancarias válidas e independientes. '+(' | '.join(source_errors) if source_errors else 'Configure y pruebe tres fuentes.'))
+        require_currency_source_coverage(valid_snapshots,selected_currencies,minimum=3)
 
         names=form.getlist('company_name'); dbs=form.getlist('database_name'); types=form.getlist('db_type'); envs=form.getlist('environment'); roots=form.getlist('company_service_root'); ods=form.getlist('company_odata'); users=form.getlist('sap_user'); passwords=form.getlist('sap_password')
         if not names or not dbs: raise ValueError('Agregue al menos una base SAP.')
@@ -220,7 +225,6 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
         except Exception as exc:
             raise ValueError('Hora de automatización inválida.') from exc
         if not (0 <= hh <= 23 and 0 <= mm <= 59): raise ValueError('Hora de automatización inválida.')
-        currencies_csv=str(form.get('currencies_csv','USD,EUR')).upper().replace(' ','')
         timezone=str(form.get('timezone','America/Tegucigalpa')).strip()
         ZoneInfo(timezone)
 
