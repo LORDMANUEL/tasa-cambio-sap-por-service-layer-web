@@ -29,6 +29,7 @@
     const sections=[...setupForm.querySelectorAll('.setup-card')];
     const chips=[...document.querySelectorAll('.setup-steps > span')];
     const key='atas-setup-draft-v1';
+    const slugs=['empresa','administrador','notificaciones','service-layer','bases-sap','bancos','automatizacion','finalizar'];
     let step=0;
     const nav=document.createElement('div');
     nav.className='setup-navigation';
@@ -37,8 +38,10 @@
     const alerts=document.createElement('div');alerts.className='setup-error';alerts.hidden=true;
     setupForm.prepend(alerts);
     const setError=(message)=>{alerts.textContent=message;alerts.hidden=!message;if(message)alerts.scrollIntoView({block:'center'})};
-    const show=(index)=>{
+    const show=(index,updateUrl=true)=>{
       step=Math.max(0,Math.min(index,sections.length-1));
+      if(updateUrl)history.pushState({step},'', '/setup?step='+(step+1));
+      document.title='Atas — '+(chips[step]?.textContent||'Configuración');
       sections.forEach((section,i)=>{section.hidden=i!==step;section.classList.toggle('setup-active',i===step)});
       chips.forEach((chip,i)=>{chip.classList.toggle('active',i===step);chip.classList.toggle('completed',i<step)});
       nav.querySelector('[data-setup-back]').disabled=step===0;
@@ -77,18 +80,27 @@
     }catch(_){}
     setupForm.addEventListener('input',draft);
     setupForm.addEventListener('change',draft);
-    chips.forEach((chip,i)=>{chip.tabIndex=0;chip.setAttribute('role','button');chip.onclick=()=>{draft();show(i)};chip.onkeydown=e=>{if(e.key==='Enter')show(i)}});
+    chips.forEach((chip,i)=>{chip.tabIndex=0;chip.setAttribute('role','button');chip.onclick=()=>{if(i<=step){draft();show(i)}};chip.onkeydown=e=>{if(e.key==='Enter'&&i<=step)show(i)}});
+    window.addEventListener('popstate',()=>{const n=Number(new URLSearchParams(location.search).get('step'));show(Number.isInteger(n)&&n>=1&&n<=8?n-1:0,false)});
     nav.querySelector('[data-setup-back]').onclick=()=>{draft();show(step-1)};
     const validateStep=()=>{
       const fields=[...sections[step].querySelectorAll('[required]')].filter(el=>!el.disabled&&!el.closest('.hidden-by-shared'));
       const invalid=fields.find(el=>!el.checkValidity());
       if(invalid){invalid.reportValidity();return false}return true;
     };
-    nav.querySelector('[data-setup-next]').onclick=()=>{
+    nav.querySelector('[data-setup-next]').onclick=async()=>{
       if(!validateStep())return;
-      draft();
-      if(step===sections.length-1)setupForm.requestSubmit();
-      else show(step+1);
+      draft();setError('');
+      const next=nav.querySelector('[data-setup-next]');next.disabled=true;
+      try{
+        const payload=new FormData(setupForm);payload.set('_step',String(step+1));
+        const response=await fetch('/setup/validate-step',{method:'POST',body:payload,credentials:'same-origin'});
+        const result=await response.json();
+        if(!response.ok||!result.ok){setError(result.error||'Revise los datos de este paso.');return}
+        if(step===sections.length-1)setupForm.requestSubmit();
+        else{show(step+1);draft()}
+      }catch(e){setError('No se pudo validar el paso en el servidor; no se avanzó ni se perdieron datos.')}
+      finally{next.disabled=false}
     };
     setupForm.addEventListener('submit',async e=>{
       e.preventDefault();if(!validateStep())return;
@@ -107,7 +119,8 @@
       }catch(err){setError('No fue posible contactar al servidor. Los datos ingresados siguen en pantalla.')}
       finally{nav.querySelector('[data-setup-next]').disabled=false}
     });
-    show(step);
+    const requested=Number(new URLSearchParams(location.search).get('step'));
+    show(Number.isInteger(requested)&&requested>=1&&requested<=8?requested-1:step,false);
   }
 
   // Toast --------------------------------------------------------------
