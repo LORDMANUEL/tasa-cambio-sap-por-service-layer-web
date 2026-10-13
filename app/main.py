@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
@@ -147,9 +147,51 @@ def _setup_page(error:str='')->str:
     return layout('Configuración inicial',body,setup=True)
 
 @app.get('/setup',response_class=HTMLResponse)
-def setup_get():
+def setup_get(step: int = 1):
     if _setup_complete(): return RedirectResponse('/login',303)
     return HTMLResponse(_setup_page())
+
+@app.post('/setup/validate-step')
+async def setup_validate_step(req: Request):
+    if _setup_complete(): return JSONResponse({'ok':False,'error':'Configuración ya completada.'},status_code=409)
+    form=await req.form()
+    try:
+        step=int(form.get('_step','0'))
+        if not 1 <= step <= 8: raise ValueError('Paso de configuración inválido.')
+        if step==1 and not str(form.get('organization_name','')).strip():
+            raise ValueError('Indique el nombre de la empresa.')
+        if step==2 and (not str(form.get('admin_user','')).strip() or len(str(form.get('admin_password','')))<6):
+            raise ValueError('Indique usuario administrador y contraseña de al menos 6 caracteres.')
+        if step==3 and 'notifications_enabled' in form:
+            host=str(form.get('smtp_host','')).strip()
+            if not host: raise ValueError('Ingrese el servidor SMTP o desactive las notificaciones.')
+            port=int(form.get('smtp_port','587'))
+            if not 1 <= port <= 65535: raise ValueError('Puerto SMTP fuera de rango.')
+        if step==4:
+            root=str(form.get('service_layer_root','')).strip()
+            if not root.startswith(('https://','http://')) or '/b1s' not in root:
+                raise ValueError('Service Layer debe ser una URL válida que incluya /b1s.')
+        if step==5:
+            names=[str(v).strip() for v in form.getlist('database_name')]
+            if not names or not all(names) or len(set(names))!=len(names):
+                raise ValueError('Ingrese CompanyDB distintas para cada base SAP.')
+            if 'same_sap_credentials' in form:
+                if not str(form.get('shared_sap_user','')).strip() or not str(form.get('shared_sap_password','')):
+                    raise ValueError('Ingrese credenciales SAP compartidas.')
+            elif not all(str(x).strip() for x in form.getlist('sap_user')) or not all(str(x) for x in form.getlist('sap_password')):
+                raise ValueError('Ingrese usuario y clave SAP para cada base.')
+        if step==6:
+            sources=[str(s).strip() for s in form.getlist('source_code') if str(s).strip()]
+            if not sources or len(set(sources))!=len(sources):
+                raise ValueError('Registre al menos un banco con código único.')
+            # Bank network checks remain in final commit; this stage validates structure only.
+        if step==7:
+            hh,mm=[int(x) for x in str(form.get('schedule_time','06:00')).split(':',1)]
+            if not 0<=hh<=23 or not 0<=mm<=59: raise ValueError('Hora de ejecución inválida.')
+            ZoneInfo(str(form.get('timezone','America/Tegucigalpa')).strip())
+        return {'ok':True,'step':step}
+    except Exception as exc:
+        return JSONResponse({'ok':False,'error':str(exc)},status_code=422)
 
 @app.post('/setup')
 async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
