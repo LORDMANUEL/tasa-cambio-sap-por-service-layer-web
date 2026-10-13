@@ -20,17 +20,17 @@ def test_proprietary_license_and_legal_notices_exist():
     assert "requirements-runtime.txt" in third
 
 
-def test_github_pages_points_to_stable_v503_assets():
+def test_github_pages_points_to_stable_v504_assets():
     site = (ROOT / "site/index.html").read_text(encoding="utf-8")
     expected = (
-        "Atas-V5.0.3-Setup-x64.exe",
-        "Atas-V5.0.3-Portable-x64.zip",
-        "atas_5.0.3_amd64.deb",
+        "Atas-V5.0.4-Setup-x64.exe",
+        "Atas-V5.0.4-Portable-x64.zip",
+        "atas_5.0.4_amd64.deb",
     )
     for name in expected:
         assert name in site
-    assert "releases/download/v5.0.2/" not in site
-    assert "V5.0.2" not in site
+    assert "releases/download/v5.0.3/" not in site
+    assert "V5.0.3" not in site
 
 
 def test_public_docs_do_not_claim_sap_affiliation():
