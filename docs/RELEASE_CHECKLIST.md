@@ -41,10 +41,10 @@
 - [x] Portable smoke.
 - [x] DEB smoke.
 - [x] Security workflow verde.
-- [ ] VERSION.txt = 5.0.4.
-- [ ] Release v5.0.4.
-- [ ] hashes/manifiesto finales.
-- [ ] Pages V5.0.4.
+- [x] VERSION.txt = 5.0.4.
+- [x] Release v5.0.4.
+- [x] hashes/manifiesto finales.
+- [x] Pages V5.0.4.
 
 ## Ambiente de cliente
 

@@ -4,7 +4,7 @@ Revisión consolidada: 2026-10-13.
 
 ## Software
 
-Estado: **READY FOR RELEASE GATE**.
+Estado: **RELEASED — V5.0.4**.
 
 Validado:
 
@@ -52,4 +52,4 @@ Cada instalación debe validar desde su red:
 
 ## Conclusión
 
-No quedan P0 de implementación conocidos para publicar V5.0.4. La conectividad SAP real es aceptación del despliegue, no una función faltante del código.
+V5.0.4 está publicada y no quedan P0 de implementación conocidos. La conectividad SAP real, permisos, TLS y autorización PROD son aceptación del despliegue de cada cliente, no funciones faltantes del software.

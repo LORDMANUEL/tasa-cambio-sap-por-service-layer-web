@@ -110,10 +110,10 @@ Criterios:
 - [x] 111 tests Debian/Ubuntu.
 - [x] secret scan completo.
 - [x] EXE/Portable/DEB smoke-tested.
-- [ ] VERSION.txt = 5.0.4.
-- [ ] Release V5.0.4 publicada.
-- [ ] manifiesto/hashes finales.
-- [ ] Pages V5.0.4.
+- [x] VERSION.txt = 5.0.4.
+- [x] Release V5.0.4 publicada.
+- [x] manifiesto/hashes finales.
+- [x] Pages V5.0.4.
 
 Los cuatro últimos ítems se completan en el gate de release.
 

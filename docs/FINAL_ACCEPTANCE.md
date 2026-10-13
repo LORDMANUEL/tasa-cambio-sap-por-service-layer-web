@@ -45,4 +45,11 @@ Esto no impide cerrar la entrega del software; es aceptación de despliegue.
 
 ## Estado de release
 
-Este documento queda completo cuando V5.0.4 se publique y se registren hashes finales.
+**COMPLETO.**
+
+- Release: `v5.0.4`.
+- Commit de release: `83167d7eac0e369421cdbab9c11906946af95703`.
+- Release publicada: 2026-10-13.
+- Manifiesto: `docs/RELEASE_MANIFEST_V5.0.4.md`.
+
+La entrega de software V5.0.4 queda cerrada. Lo restante corresponde a aceptación del ambiente de cada cliente y operación normal de mantenimiento.

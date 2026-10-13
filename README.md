@@ -103,23 +103,23 @@ Los binarios se publican como **Artifacts** del workflow:
 
 Artifacts esperados:
 
-- `Atas-Windows-x64` → `Atas-V5.0.3-Setup-x64.exe` + `BUILD_INFO.txt`.
-- `Atas-Windows-Portable-x64` → `Atas-V5.0.3-Portable-x64.zip` + `BUILD_INFO_PORTABLE.txt`.
-- `Atas-Debian-amd64` → `atas_5.0.3_amd64.deb` + `BUILD_INFO_DEBIAN.txt`.
+- `Atas-Windows-x64` → `Atas-V5.0.4-Setup-x64.exe` + `BUILD_INFO.txt`.
+- `Atas-Windows-Portable-x64` → `Atas-V5.0.4-Portable-x64.zip` + `BUILD_INFO_PORTABLE.txt`.
+- `Atas-Debian-amd64` → `atas_5.0.4_amd64.deb` + `BUILD_INFO_DEBIAN.txt`.
 
-## Binarios V5.0.3 verificados
+## Binarios V5.0.4 verificados
 
 | Plataforma | Archivo | Tamaño | SHA-256 |
 |---|---|---:|---|
-| Windows Installer x64 | `Atas-V5.0.3-Setup-x64.exe` | 18,419,585 B · 17.57 MiB | `d57b5e79cf8df9f26d2c5129dc0f22505685e53c25c890d53d4c7f9426a90df4` |
-| Windows Portable x64 | `Atas-V5.0.3-Portable-x64.zip` | 25,158,001 B · 23.99 MiB | `4222dff8da2adb5fefa745bd6a4777dca3ff3b81581b1ed5ba737f08470cdba9` |
-| Debian/Ubuntu amd64 | `atas_5.0.3_amd64.deb` | 76,026 B · 74.24 KiB | `d69efb3f9ad14ea64b379d8023339112115031ab7e0deadf94b68447417cd62f` |
+| Windows Installer x64 | `Atas-V5.0.4-Setup-x64.exe` | 19,055,347 B · 18.17 MiB | `c4fa201e4a2428e435afc9efdde6cc691acbddfa3e7d9821f7726c9cfff6e3bf` |
+| Windows Portable x64 | `Atas-V5.0.4-Portable-x64.zip` | 26,347,639 B · 25.13 MiB | `6da450f9866cbde07dd8d0c8271ec7c860501d77ca395ee2d575a937a226e54b` |
+| Debian/Ubuntu amd64 | `atas_5.0.4_amd64.deb` | 113,454 B · 110.79 KiB | `f764a0220423555ecc340b286851511e0703bf85d42d918574f0642233f4bb41` |
 
-[Manifiesto completo](docs/RELEASE_MANIFEST_V5.0.3.md)
+[Manifiesto completo](docs/RELEASE_MANIFEST_V5.0.4.md)
 
 ## Release estable
 
-**Atas V5.0.3** quedó validada en Windows y Debian/Ubuntu con **111 pruebas automáticas por plataforma**, smoke tests del producto instalado y verificación del wizard/recursos web.
+**Atas V5.0.4** quedó validada en Windows y Debian/Ubuntu con **111 pruebas automáticas por plataforma**, smoke tests del producto instalado, verificación del wizard/recursos web y secret scan completo del árbol e historial Git.
 
 La versión publicada se encuentra en:
 
@@ -127,7 +127,7 @@ La versión publicada se encuentra en:
 
 La Release adjunta los binarios de Windows y Debian junto con sus archivos de tamaño/SHA-256.
 
-> Estado de desarrollo: `main` está en **5.0.4-dev**. El candidato V5.0.4 ha validado 111 pruebas por plataforma, EXE, Portable, DEB y secret scan completo. La release pública estable y GitHub Pages continúan apuntando a **V5.0.3** hasta cerrar la aceptación funcional de V5.0.4.
+> Estado estable: **V5.0.4** publicada el 13 de octubre de 2026.
 
 ## Ejecución desde código fuente
 
