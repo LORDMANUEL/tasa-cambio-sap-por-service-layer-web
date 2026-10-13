@@ -119,7 +119,7 @@ Artifacts esperados:
 
 ## Release estable
 
-**Atas V5.0.4** quedó validada en Windows y Debian/Ubuntu con **111 pruebas automáticas por plataforma**, smoke tests del producto instalado, verificación del wizard/recursos web y secret scan completo del árbol e historial Git.
+**Atas V5.0.4** quedó validada en Windows y Debian/Ubuntu con **701 pruebas automáticas por plataforma**, smoke tests del producto instalado, verificación del wizard/recursos web y secret scan completo del árbol e historial Git.
 
 La versión publicada se encuentra en:
 

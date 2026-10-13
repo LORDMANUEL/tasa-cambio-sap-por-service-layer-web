@@ -8,8 +8,8 @@ Estado: **RELEASED — V5.0.4**.
 
 Validado:
 
-- 111 tests Windows;
-- 111 tests Debian/Ubuntu;
+- 701 tests Windows;
+- 701 tests Debian/Ubuntu;
 - EXE/Portable/DEB smoke;
 - secret scan árbol + historial;
 - backup/restore;

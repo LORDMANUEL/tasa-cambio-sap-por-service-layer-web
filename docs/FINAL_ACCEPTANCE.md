@@ -8,8 +8,8 @@ Evidencia previa al gate final:
 
 - Build installers: SUCCESS.
 - Security scan: SUCCESS.
-- 111 tests Windows.
-- 111 tests Debian/Ubuntu.
+- 701 tests Windows.
+- 701 tests Debian/Ubuntu.
 - Windows EXE smoke: OK.
 - Windows Portable smoke: OK.
 - Debian DEB smoke: OK.

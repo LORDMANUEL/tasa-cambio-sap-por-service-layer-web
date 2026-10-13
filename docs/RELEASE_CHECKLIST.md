@@ -35,8 +35,8 @@
 
 ## Build
 
-- [x] 111 tests Windows.
-- [x] 111 tests Debian/Ubuntu.
+- [x] 701 tests Windows.
+- [x] 701 tests Debian/Ubuntu.
 - [x] EXE smoke.
 - [x] Portable smoke.
 - [x] DEB smoke.

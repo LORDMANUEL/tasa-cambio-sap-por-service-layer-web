@@ -2,12 +2,12 @@
 
 ## Baseline automatizado
 
-- `pytest`: **111 passed**
+- `pytest`: **701 passed**
 
 Commit de referencia anterior al gate final: `83db7990`.
 
-- Windows: **111 passed**, 1 warning de dependencia externa.
-- Debian/Ubuntu: **111 passed**, 1 warning de dependencia externa.
+- Windows: **701 passed**, 1 warning de dependencia externa.
+- Debian/Ubuntu: **701 passed**, 1 warning de dependencia externa.
 - `compileall app`: OK.
 - `node --check app/static/app.js`: OK.
 - secret scan árbol + historial: OK.
@@ -64,3 +64,15 @@ Debian/Ubuntu:
 ## Limitación de ambiente
 
 CI no escribe contra un SAP privado ni depende de disponibilidad bancaria externa en tiempo real. La aceptación de red/Service Layer se ejecuta en el despliegue TEST de cada cliente.
+
+
+## Matriz ampliada de regresión
+
+Validación post-release ejecutada sobre el mismo código funcional de V5.0.4:
+
+- 590 casos adicionales parametrizados.
+- Total actual: **701 pruebas** por plataforma.
+- Windows: 701 passed.
+- Debian/Ubuntu: 701 passed.
+- Security scan: SUCCESS.
+- Cobertura ampliada sobre CREATE / UPDATE / MATCH, buy/sell, spread, parsers HTML/JSON y mínimo de fuentes por moneda.

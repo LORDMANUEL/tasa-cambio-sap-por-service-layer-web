@@ -154,4 +154,4 @@ python -m pytest -q
 python scripts/security/scan_secrets.py --history
 ```
 
-Build de referencia previo al cierre V5.0.4: **111 tests por plataforma**.
+Build de referencia previo al cierre V5.0.4: **701 tests por plataforma**.

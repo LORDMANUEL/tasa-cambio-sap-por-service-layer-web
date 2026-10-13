@@ -106,8 +106,8 @@ Criterios:
 - [x] Backend Schema.
 - [x] trazabilidad.
 - [x] documentación técnica.
-- [x] 111 tests Windows.
-- [x] 111 tests Debian/Ubuntu.
+- [x] 701 tests Windows.
+- [x] 701 tests Debian/Ubuntu.
 - [x] secret scan completo.
 - [x] EXE/Portable/DEB smoke-tested.
 - [x] VERSION.txt = 5.0.4.
