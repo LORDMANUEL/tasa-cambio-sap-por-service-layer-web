@@ -119,7 +119,7 @@ Artifacts esperados:
 
 ## Release estable
 
-**Atas V5.0.3** quedó validada en Windows y Debian/Ubuntu con **77 pruebas automáticas por plataforma**, smoke tests del producto instalado y verificación del wizard/recursos web.
+**Atas V5.0.3** quedó validada en Windows y Debian/Ubuntu con **111 pruebas automáticas por plataforma**, smoke tests del producto instalado y verificación del wizard/recursos web.
 
 La versión publicada se encuentra en:
 
@@ -127,7 +127,7 @@ La versión publicada se encuentra en:
 
 La Release adjunta los binarios de Windows y Debian junto con sus archivos de tamaño/SHA-256.
 
-> Estado de desarrollo: `main` está en **5.0.4-dev**. El build #192 validó 77 pruebas por plataforma, EXE, Portable y DEB. La release pública estable y GitHub Pages continúan apuntando a **V5.0.3** hasta cerrar la aceptación funcional de V5.0.4.
+> Estado de desarrollo: `main` está en **5.0.4-dev**. El candidato V5.0.4 ha validado 111 pruebas por plataforma, EXE, Portable, DEB y secret scan completo. La release pública estable y GitHub Pages continúan apuntando a **V5.0.3** hasta cerrar la aceptación funcional de V5.0.4.
 
 ## Ejecución desde código fuente
 
@@ -177,6 +177,15 @@ docs/                   Documentación técnica y operativa
 
 ## Documentación
 
+- [PRD](docs/PRD.md)
+- [TRD](docs/TRD.md)
+- [UI/UX Design](docs/UI_UX_DESIGN.md)
+- [Appflow](docs/APPFLOW.md)
+- [Backend Schema](docs/BACKEND_SCHEMA.md)
+- [Development Plan](docs/DEVELOPMENT_PLAN.md)
+- [Matriz de trazabilidad](docs/TRACEABILITY_MATRIX.md)
+- [Documentación técnica consolidada](docs/TECHNICAL_DOCUMENTATION.md)
+- [Final Acceptance](docs/FINAL_ACCEPTANCE.md)
 - [Arquitectura](docs/01_ARQUITECTURA.md)
 - [Asistente inicial](docs/02_ASISTENTE_INICIAL.md)
 - [Multiempresa / Service Layer](docs/03_MULTIEMPRESA_SERVICE_LAYER.md)

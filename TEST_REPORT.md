@@ -1,65 +1,64 @@
-# TEST REPORT — Atas V5 Complete
+# TEST REPORT — Atas V5.0.4 Candidate
 
-Validación ejecutada sobre el paquete final.
+## Baseline automatizado
 
-## Suite automática
+Commit de referencia anterior al gate final: `83db7990`.
 
-- `pytest`: **77 passed**
-- `compileall app`: OK
-- `node --check app/static/app.js`: OK
+- Windows: **111 passed**, 1 warning de dependencia externa.
+- Debian/Ubuntu: **111 passed**, 1 warning de dependencia externa.
+- `compileall app`: OK.
+- `node --check app/static/app.js`: OK.
+- secret scan árbol + historial: OK.
 
-## Validación de distribución
+## Distribución
 
-- Windows EXE: compilación Inno Setup + instalación silenciosa + arranque + `/health`.
-- Windows Portable ZIP: descompresión limpia + arranque con Python embebido + `/health`.
-- Debian/Ubuntu DEB: instalación APT + venv + servicio/aplicación + `/health`.
-- GitHub Pages: publicación a `gh-pages` + verificación HTTP pública.
-- Higiene de release: bloqueo de endpoints/CompanyDB específicos de clientes.
+Windows:
+- EXE build: OK.
+- instalación limpia: OK.
+- /health: OK.
+- wizard: OK.
+- assets: OK.
+- single-instance: OK.
+- autostart: OK.
 
-## Casos cubiertos
+Portable:
+- ZIP: OK.
+- Python embebido: OK.
+- root launcher: OK.
+- /health: OK.
 
-- instalación nueva sin datos específicos de proveedor/empresa;
-- configuración multiempresa/multi-Service-Layer;
-- endpoint OData efectivo por base;
-- política CREATE / UPDATE / MATCH con Decimal;
-- sesión web/hash;
-- guard de escritura SAP;
-- lectura scalar Service Layer;
-- SAP `-4006` interpretado como tasa ausente;
-- setup completo multiempresa;
-- navegación del panel;
-- parser WEB_HTML AUTO;
-- parser API_JSON AUTO;
-- persistencia de fuentes dinámicas;
-- bloqueo con menos de 3 fuentes;
-- consenso válido con 3 fuentes;
-- bloqueo por outlier de fuente oficial;
-- CRUD web de fuente;
-- preview/escaneo web de fuente;
-- headers secretos preparados para cifrado DPAPI;
-- claim diario atómico por CompanyDB;
-- bloqueo de segunda ejecución automática el mismo día;
-- persistencia del claim ante error inesperado;
-- deduplicación de errores ya registrados por el reconciliador;
-- `VERSION.txt` como única fuente de versión para app, EXE, Portable, DEB y `/health`;
-- bloqueo de versiones hardcodeadas en packaging.
+Debian/Ubuntu:
+- DEB: OK.
+- instalación: OK.
+- /health: OK.
+- wizard/assets: OK.
 
-## Limitación intencional
+## Cobertura funcional relevante
 
-Las pruebas no escriben contra un SAP de producción ni dependen de sitios externos. Las conexiones reales se validan desde los botones `Probar SAP` y `Probar / escanear` en la instalación del cliente.
+- setup multiempresa;
+- Service Layer v1/v2;
+- CREATE / UPDATE / MATCH;
+- SAP -4006;
+- GET posterior a escritura;
+- gates TEST/PROD;
+- consenso mínimo por moneda;
+- outliers;
+- Banpaís/Ficohsa/BCH;
+- HTML/API custom;
+- headers secretos;
+- scheduler/claim;
+- tasa repetida 20/60;
+- market observations;
+- backup/restore;
+- recuperación credenciales;
+- routers extraídos;
+- migraciones SQLite.
 
+## Warnings no bloqueantes
 
-## Validación de desarrollo V5.0.4-dev — build #192
+- Starlette TestClient referencia un alias anyio deprecado.
+- algunas GitHub Actions de terceros reportan transición Node runtime.
 
-- Windows: 77 pruebas aprobadas.
-- Debian/Ubuntu: 77 pruebas aprobadas.
-- Windows Portable: arranque y `/health` aprobados.
-- Windows Installer: instalación, arranque, wizard, assets y single-instance aprobados.
-- Debian/Ubuntu: instalación, servicio/aplicación, wizard y assets aprobados.
-- Reintento de tasa bancaria repetida: cubierto por pruebas.
-- Persistencia de tasa del día anterior: cubierta por pruebas.
-- Migración de campos de reintento: cubierta por pruebas.
-- Estado `WAITING_BANK_UPDATE`: cubierto por pruebas.
-- Límite de reintentos y transición a `ATTENTION`: cubierto por pruebas.
+## Limitación de ambiente
 
-La validación automática no sustituye una aceptación real contra SAP Business One TEST ni valida disponibilidad futura de sitios bancarios externos.
+CI no escribe contra un SAP privado ni depende de disponibilidad bancaria externa en tiempo real. La aceptación de red/Service Layer se ejecuta en el despliegue TEST de cada cliente.

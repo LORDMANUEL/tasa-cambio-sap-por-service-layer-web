@@ -1,32 +1,57 @@
-# Checklist de Release — Atas V5
+# Checklist de Release — Atas V5.0.4
 
-Una versión se considera publicable solamente cuando se cumplen todos los puntos:
+## Producto
 
-- [x] Producto identificado como Atas.
-- [x] Autor: Luis Manuel Fajardo Rivera (LORDMANUEL).
-- [x] Sin IP/CompanyDB/datos específicos del cliente originador.
-- [x] 3+ fuentes para automatización.
-- [x] SAP Service Layer/OData configurables.
-- [x] TEST/PROD separados.
-- [x] Verificación GET después de escritura SAP.
-- [x] SQLite/auditoría.
-- [x] SMTP saliente opcional.
-- [x] CI Windows.
-- [x] CI Ubuntu.
-- [x] 52 pruebas automáticas en Windows y 52 en Ubuntu.
-- [x] EXE compilado.
-- [x] EXE instalado en runner limpio.
-- [x] EXE levantó Atas y pasó /health.
-- [x] Portable ZIP generado.
-- [x] Portable ZIP descomprimido y probado.
-- [x] DEB construido.
-- [x] DEB instalado con APT y probado.
-- [x] GitHub Pages público y validado.
-- [x] Tamaño y SHA-256 generados por CI.
-- [x] Notas de versión preparadas.
-- [x] VERSION.txt en 5.0.2 y Release V5.0.3 publicada.
+- [x] PRD.
+- [x] TRD.
+- [x] UI/UX Design.
+- [x] Appflow.
+- [x] Backend Schema.
+- [x] Development Plan.
+- [x] Technical Documentation.
+- [x] Traceability Matrix.
+- [x] Changelog.
 
-La última casilla se completa únicamente después de que el commit candidato pase todos los workflows.
+## Seguridad
 
+- [x] secretos cifrados.
+- [x] secret scan árbol actual.
+- [x] secret scan historial completo.
+- [x] TEST/PROD gates.
+- [x] TLS configurable.
+- [x] backup sensible documentado.
 
-Release estable verificada: https://github.com/LORDMANUEL/tasa-cambio-sap-por-service-layer-web/releases/tag/v5.0.3
+## Funcional
+
+- [x] fuente oficial configurable.
+- [x] 3 fuentes por moneda.
+- [x] USD default.
+- [x] custom HTML/API.
+- [x] política 20/60.
+- [x] CREATE/UPDATE/MATCH.
+- [x] verificación GET.
+- [x] auditoría.
+- [x] backup/restore.
+
+## Build
+
+- [x] 111 tests Windows.
+- [x] 111 tests Debian/Ubuntu.
+- [x] EXE smoke.
+- [x] Portable smoke.
+- [x] DEB smoke.
+- [x] Security workflow verde.
+- [ ] VERSION.txt = 5.0.4.
+- [ ] Release v5.0.4.
+- [ ] hashes/manifiesto finales.
+- [ ] Pages V5.0.4.
+
+## Ambiente de cliente
+
+No es gate de publicación del software:
+
+- [ ] SAP TEST real del cliente.
+- [ ] permisos usuario SAP.
+- [ ] TLS según red.
+- [ ] fuentes reales seleccionadas.
+- [ ] autorización PROD.
