@@ -7,6 +7,8 @@ bank buy/sell quote. For consensus purposes buy=sell=TCR is intentional.
 from __future__ import annotations
 
 import hashlib
+import re
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -69,20 +71,40 @@ def parse_bch_xlsx(content: bytes, settings: Settings, *, today: date | None=Non
     except Exception as exc:
         raise BankProviderError("BCH no devolvió un XLSX válido.") from exc
     try:
-        ws=wb["Datos"] if "Datos" in wb.sheetnames else wb.active
-        header=[str(v or "").strip().upper() for v in next(ws.iter_rows(min_row=1,max_row=1,values_only=True))]
-        if len(header)<2 or header[0]!="FECHA" or header[1]!="TCR":
-            raise BankProviderError("BCH cambió la estructura del XLSX: se esperaba Fecha, TCR.")
         local_today=today or datetime.now(ZoneInfo(settings.timezone)).date()
         candidates=[]
-        for row in ws.iter_rows(min_row=2,values_only=True):
-            if len(row)<2:
+        # BCH publishes yearly workbooks with title/merged rows and changing
+        # headings. Detect a real date column and a named reference-rate column
+        # within the first 35 rows rather than assuming A1/B1.
+        def norm(v):
+            s=unicodedata.normalize("NFKD", str(v or "").upper())
+            return re.sub(r"\\s+", " ", "".join(ch for ch in s if not unicodedata.combining(ch))).strip()
+        def rate_col(s):
+            return bool(re.search(r"\\bTCR\\b|TIPO DE CAMBIO DE REFERENCIA|TASA DE CAMBIO DE REFERENCIA",s))
+        for ws in wb.worksheets:
+            rows=ws.iter_rows(values_only=True)
+            header=None
+            for rowno,row in enumerate(rows,1):
+                if rowno>35: break
+                vals=[norm(v) for v in row]
+                dates=[i for i,x in enumerate(vals) if re.search(r"\\bFECHA\\b|\\bDIA\\b",x)]
+                rates=[i for i,x in enumerate(vals) if rate_col(x) and not re.search(r"COMPRA|VENTA|VARIACION|VAR\\.",x)]
+                if dates and rates:
+                    pairs=[(d,r) for d in dates for r in rates if d!=r]
+                    if pairs:
+                        header=(rowno,*min(pairs,key=lambda x:abs(x[0]-x[1])))
+                        break
+            if header is None:
                 continue
-            observed=_to_date(row[0]); value=_to_decimal(row[1])
-            if observed and value is not None and observed<=local_today:
-                candidates.append((observed,value))
+            _,date_idx,rate_idx=header
+            for row in rows:
+                if max(date_idx,rate_idx)>=len(row): continue
+                observed=_to_date(row[date_idx])
+                value=_to_decimal(row[rate_idx])
+                if observed and value is not None and observed<=local_today:
+                    candidates.append((observed,value))
         if not candidates:
-            raise BankProviderError("BCH no contiene un TCR vigente o anterior a la fecha local.")
+            raise BankProviderError("BCH: no se encontró una pareja Fecha/TCR válida en las hojas del XLSX.")
         observed,tcr=max(candidates,key=lambda item:item[0])
         age=(local_today-observed).days
         if age>max(1,int(max_age_days)):
