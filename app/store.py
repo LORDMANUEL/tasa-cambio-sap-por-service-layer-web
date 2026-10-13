@@ -208,7 +208,7 @@ class Store:
                 "notification_recipients": "",
                 "notify_success": "true",
                 "notify_errors": "true",
-                "min_market_sources": "3",
+                "min_market_sources": "1",
                 "max_source_deviation_percent": "2.0",
                 "max_pair_spread_percent": "35.0",
                 "same_rate_retry_minutes": "20",
