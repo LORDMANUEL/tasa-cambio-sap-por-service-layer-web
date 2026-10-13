@@ -25,6 +25,7 @@
   const setupForm=document.querySelector('form.setup-form');
   if(setupForm){
     setupForm.dataset.noGuard='true';
+    setupForm.noValidate=true;
     const sections=[...setupForm.querySelectorAll('.setup-card')];
     const chips=[...document.querySelectorAll('.setup-steps > span')];
     const key='atas-setup-draft-v1';
