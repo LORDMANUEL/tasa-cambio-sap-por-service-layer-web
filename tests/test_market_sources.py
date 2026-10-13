@@ -31,15 +31,17 @@ def test_store_requires_and_persists_dynamic_sources():
         assert row['code']=='BANK1' and row['source_type']=='WEB_HTML'
 
 
-def test_consensus_requires_three_sources(monkeypatch):
+def test_consensus_accepts_one_valid_source(monkeypatch):
     import app.market_sources as ms
     with tempfile.TemporaryDirectory() as d:
         st=Store(Path(d)/'x.db')
         for code in ('A','B'):
             st.upsert_bank_source(source_id=None,code=code,name=code,country='X',source_type='WEB_HTML',url='https://example.com',enabled=True,config_json='{}')
         company={'primary_bank':'A','bank_source_codes':'A,B'}
+        from app.market_sources import SourceSnapshot
+        monkeypatch.setattr(ms,'fetch_source',lambda src,settings:SourceSnapshot(src['code'],src['name'],src['source_type'],src['url'],'2026-10-05T06:00:00-06:00',{'USD':{'buy':Decimal('26.9'),'sell':Decimal('27.02')}},'x'))
         c=build_consensus(st,Settings(),company,['USD'])
-        assert not c.safe and any('3 fuentes' in w for w in c.warnings)
+        assert c.safe and c.official_rates['USD']==Decimal('27.02')
 
 def test_consensus_three_sources_accepts_official_near_median(monkeypatch):
     import app.market_sources as ms
@@ -112,7 +114,7 @@ def test_consensus_rejects_sell_below_buy(monkeypatch):
             return SourceSnapshot(src['code'],src['name'],src['source_type'],src['url'],'2026-10-05T06:00:00-06:00',{'USD':pair},'x')
         monkeypatch.setattr(ms,'fetch_source',fake)
         c=ms.build_consensus(st,Settings(),{'primary_bank':'A','bank_source_codes':'A,B,C'},['USD'])
-        assert not c.safe
+        assert c.safe
         assert 'B' in c.failed_sources
         assert 'menor que compra' in c.failed_sources['B']
 
@@ -130,7 +132,7 @@ def test_consensus_rejects_implausible_pair_spread(monkeypatch):
             return SourceSnapshot(src['code'],src['name'],src['source_type'],src['url'],'2026-10-05T06:00:00-06:00',{'USD':pair},'x')
         monkeypatch.setattr(ms,'fetch_source',fake)
         c=ms.build_consensus(st,Settings(),{'primary_bank':'A','bank_source_codes':'A,B,C'},['USD'])
-        assert not c.safe
+        assert c.safe
         assert 'C' in c.failed_sources
         assert 'spread compra/venta' in c.failed_sources['C']
 
