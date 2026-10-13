@@ -2,6 +2,8 @@
 
 ## Baseline automatizado
 
+- `pytest`: **111 passed**
+
 Commit de referencia anterior al gate final: `83db7990`.
 
 - Windows: **111 passed**, 1 warning de dependencia externa.
