@@ -104,7 +104,7 @@ def parse_bch_xlsx(content: bytes, settings: Settings, *, today: date | None=Non
                 if observed and value is not None and observed<=local_today:
                     candidates.append((observed,value))
         if not candidates:
-            raise BankProviderError("BCH: no se encontró una pareja Fecha/TCR válida en las hojas del XLSX.")
+            raise BankProviderError("BCH: estructura XLSX sin una pareja Fecha/TCR válida en las hojas.")
         observed,tcr=max(candidates,key=lambda item:item[0])
         age=(local_today-observed).days
         if age>max(1,int(max_age_days)):
