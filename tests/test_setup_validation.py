@@ -46,7 +46,7 @@ def test_wizard_has_individual_steps_and_recovery_hooks():
     from app.main import _setup_page
     page=_setup_page()
     script=(Path(__file__).resolve().parents[1]/"app"/"static"/"app.js").read_text(encoding="utf-8")
-    assert page.count("class='setup-card") == 8
+    assert page.count("<section class='setup-card") == 8
     assert "data-setup-next" in script
     assert "sessionStorage.setItem(key" in script
     assert "el.type==='password'" in script
