@@ -181,10 +181,31 @@ async def setup_validate_step(req: Request):
             elif not all(str(x).strip() for x in form.getlist('sap_user')) or not all(str(x) for x in form.getlist('sap_password')):
                 raise ValueError('Ingrese usuario y clave SAP para cada base.')
         if step==6:
-            sources=[str(s).strip() for s in form.getlist('source_code') if str(s).strip()]
+            scodes=form.getlist('source_code')
+            names=form.getlist('source_name')
+            types=form.getlist('source_type')
+            urls=form.getlist('source_url')
+            configs=form.getlist('source_config')
+            sources=[str(s).strip().upper() for s in scodes if str(s).strip()]
             if not sources or len(set(sources))!=len(sources):
                 raise ValueError('Registre al menos un banco con código único.')
-            # Bank network checks remain in final commit; this stage validates structure only.
+            valid=[]; failures=[]
+            for i,code in enumerate(scodes):
+                code=str(code).strip().upper()
+                if not code: continue
+                source={'code':code,'name':str(names[i] if i<len(names) else code),
+                        'source_type':str(types[i] if i<len(types) else 'WEB_HTML'),
+                        'url':str(urls[i] if i<len(urls) else ''),
+                        'config_json':str(configs[i] if i<len(configs) else '{}'),
+                        'headers_json':'{}','timeout_seconds':10,'tls_verify':1}
+                try:
+                    snapshot=fetch_source(source,settings)
+                    validate_snapshot_pairs(snapshot,store.get_settings().get('max_pair_spread_percent','35.0'))
+                    valid.append(code)
+                except Exception as exc:
+                    failures.append(f'{code}: {exc}')
+            if not valid:
+                raise ValueError('Ninguna fuente bancaria pasó la validación. '+' | '.join(failures))
         if step==7:
             hh,mm=[int(x) for x in str(form.get('schedule_time','06:00')).split(':',1)]
             if not 0<=hh<=23 or not 0<=mm<=59: raise ValueError('Hora de ejecución inválida.')
