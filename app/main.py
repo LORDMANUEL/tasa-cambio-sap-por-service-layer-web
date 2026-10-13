@@ -127,7 +127,7 @@ def _setup_page(error:str='')->str:
         </div>
         <template id='company-row-template'><div class='company-row' data-company-row><div class='row-index'>#</div><div><label>Nombre empresa/base</label><input name='company_name' placeholder='Otra empresa' required></div><div><label>Tipo BD</label><select name='db_type'><option>HANA</option><option value='SQLSERVER'>SQL Server</option></select></div><div><label>CompanyDB</label><input name='database_name' required></div><div><label>Ambiente</label><select name='environment'><option value='TEST'>TEST</option><option value='PROD'>PROD</option></select></div><div><label>Service Layer propio</label><input name='company_service_root' placeholder='Vacío = predeterminado'></div><div><label>OData propio</label><select name='company_odata'><option value=''>Predeterminado</option><option>v2</option><option>v1</option></select></div><div class='individual-creds'><label>Usuario SAP</label><input name='sap_user'></div><div class='individual-creds'><label>Contraseña SAP</label><input type='password' name='sap_password'></div><button class='row-delete' type='button' data-remove-company>×</button></div></template>
       </section>
-      <section class='setup-card'><div class='step-no'>6</div><div class='setup-card-title'><h3>Fuentes bancarias / mercado</h3><p>Agrega al menos 3 bancos o fuentes. Pueden ser páginas web, APIs JSON o conectores preconfigurados.</p></div>
+      <section class='setup-card'><div class='step-no'>6</div><div class='setup-card-title'><h3>Fuentes bancarias / mercado</h3><p>Puedes registrar 3 o más bancos o fuentes; basta 1 fuente válida para operar. Pueden ser páginas web, APIs JSON o conectores preconfigurados.</p></div>
         <div class='source-builder' data-source-list>
           <div class='source-row'><div><label>Código *</label><input name='source_code' value='BANPAIS' required></div><div><label>Nombre *</label><input name='source_name' value='Banpaís' required></div><div><label>País</label><input name='source_country' value='Honduras'></div><div><label>Tipo</label><select name='source_type'><option value='PRESET'>Conector conocido</option><option value='WEB_HTML'>Página web</option><option value='API_JSON'>API JSON</option></select></div><div class='span2'><label>URL</label><input name='source_url' value='https://www.banpais.hn/divisas/barradolar.php'></div><div class='span2'><label>Configuración JSON</label><textarea name='source_config'>{{"preset":"BANPAIS"}}</textarea></div><div class='span2'><label>Headers secretos API</label><input type='password' name='source_secret_headers' placeholder='Opcional · JSON cifrado'></div></div>
           <div class='source-row'><div><label>Código *</label><input name='source_code' value='FICOHSA' required></div><div><label>Nombre *</label><input name='source_name' value='Ficohsa' required></div><div><label>País</label><input name='source_country' value='Honduras'></div><div><label>Tipo</label><select name='source_type'><option value='PRESET'>Conector conocido</option><option value='WEB_HTML'>Página web</option><option value='API_JSON'>API JSON</option></select></div><div class='span2'><label>URL</label><input name='source_url' value='https://www.ficohsa.hn/'></div><div class='span2'><label>Configuración JSON</label><textarea name='source_config'>{{"preset":"FICOHSA"}}</textarea></div><div class='span2'><label>Headers secretos API</label><input type='password' name='source_secret_headers' placeholder='Opcional · JSON cifrado'></div></div>
@@ -135,10 +135,10 @@ def _setup_page(error:str='')->str:
         </div>
         <p class='muted'>WEB_HTML en modo AUTO intenta detectar compra/venta por moneda. API_JSON puede usar AUTO o rutas JSON explícitas. Después podrás escanear, probar, editar y agregar más fuentes desde Bancos.</p>
       </section>
-      <section class='setup-card'><div class='step-no'>7</div><div class='setup-card-title'><h3>Automatización diaria</h3><p>El sistema revisará cada base activa una vez al día y sólo escribirá si las 3 fuentes mínimas son válidas.</p></div>
+      <section class='setup-card'><div class='step-no'>7</div><div class='setup-card-title'><h3>Automatización diaria</h3><p>El sistema revisará cada base activa una vez al día y sólo continuará cuando exista una fuente válida y la política autorice la escritura.</p></div>
         <div class='form-grid cols4'><div><label>Hora</label><input type='time' name='schedule_time' value='06:00'></div><div><label>Zona horaria</label><input name='timezone' value='America/Tegucigalpa' placeholder='America/Guatemala'></div><div><label>Monedas</label><input name='currencies_csv' value='USD' placeholder='USD,EUR'></div><div><label>Fuente oficial</label><input name='primary_bank' value='BANPAIS' placeholder='Código de fuente'></div></div>
         <label class='switchline danger'><input type='checkbox' name='enable_prod_writes'><span>Permitir escritura automática en bases marcadas PROD</span></label>
-        <div class='flow-preview'><div><i>⌂</i><b>3+ fuentes</b><span>Trayendo tasas</span></div><em>→</em><div><i>✓</i><b>Consenso</b><span>Mediana y outliers</span></div><em>→</em><div><i>☁</i><b>SAP</b><span>Leyendo tasa actual</span></div><em>→</em><div><i>≠</i><b>Comparación</b><span>Fuente oficial vs consenso</span></div><em>→</em><div><i>✎</i><b>Escritura</b><span>Solo si es segura</span></div><em>→</em><div><i>✓</i><b>Listo</b><span>Verificado y auditado</span></div></div>
+        <div class='flow-preview'><div><i>⌂</i><b>1+ fuentes</b><span>Trayendo tasas</span></div><em>→</em><div><i>✓</i><b>Consenso</b><span>Mediana y outliers</span></div><em>→</em><div><i>☁</i><b>SAP</b><span>Leyendo tasa actual</span></div><em>→</em><div><i>≠</i><b>Comparación</b><span>Fuente oficial vs consenso</span></div><em>→</em><div><i>✎</i><b>Escritura</b><span>Solo si es segura</span></div><em>→</em><div><i>✓</i><b>Listo</b><span>Verificado y auditado</span></div></div>
       </section>
       <section class='setup-card finish-card'><div class='step-no'>8</div><div class='setup-card-title'><h3>Finalizar configuración</h3><p>Al guardar entrarás al dashboard y comenzará el recorrido guiado.</p></div><button class='btn primary xl' type='submit'>Guardar y entrar a Atas →</button></section>
     </form>
@@ -173,7 +173,7 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
         logo_setting=logo_url or ''
         store.set_settings({'organization_name':org,'organization_logo':logo_setting,'service_layer_root':root,'odata_version':odata,'sap_b1_version':sap_ver,'sap_base_url':_endpoint(root,odata),'sap_verify_tls':'true' if 'sap_verify_tls' in form else 'false','setup_complete':'false','prod_automation_enabled':'true' if 'enable_prod_writes' in form else 'false','notifications_enabled':'true' if notification_enabled else 'false','smtp_host':str(form.get('smtp_host','')).strip(),'smtp_port':str(form.get('smtp_port','587')).strip(),'smtp_security':str(form.get('smtp_security','STARTTLS')).strip(),'smtp_user':str(form.get('smtp_user','')).strip(),'smtp_from':str(form.get('smtp_from','')).strip(),'smtp_secret':smtp_secret,'notification_recipients':str(form.get('notification_recipients','')).strip()})
 
-        # Validate at least three independent market sources before enabling automation.
+        # Accept one successful source; additional configured sources are optional.
         scodes=form.getlist('source_code'); snames=form.getlist('source_name'); scountries=form.getlist('source_country'); stypes=form.getlist('source_type'); surls=form.getlist('source_url'); sconfigs=form.getlist('source_config'); ssecrets=form.getlist('source_secret_headers')
         currencies_csv=str(form.get('currencies_csv','USD')).upper().replace(' ','')
         selected_currencies=[x for x in currencies_csv.split(',') if x]
@@ -193,9 +193,9 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
             except Exception as exc:
                 source_errors.append(f"{src['code']}: {exc}")
         valid_sources=list(dict.fromkeys(valid_sources))
-        if len(valid_sources)<3:
-            raise ValueError('Se requieren al menos 3 fuentes bancarias válidas e independientes. '+(' | '.join(source_errors) if source_errors else 'Configure y pruebe tres fuentes.'))
-        require_currency_source_coverage(valid_snapshots,selected_currencies,minimum=3)
+        if len(valid_sources)<1:
+            raise ValueError('Se requiere al menos una fuente bancaria válida. '+(' | '.join(source_errors) if source_errors else 'Configure y pruebe al menos una fuente.'))
+        require_currency_source_coverage(valid_snapshots,selected_currencies,minimum=1)
 
         names=form.getlist('company_name'); dbs=form.getlist('database_name'); types=form.getlist('db_type'); envs=form.getlist('environment'); roots=form.getlist('company_service_root'); ods=form.getlist('company_odata'); users=form.getlist('sap_user'); passwords=form.getlist('sap_password')
         if not names or not dbs: raise ValueError('Agregue al menos una base SAP.')
@@ -303,10 +303,10 @@ async def company_save(req:Request):
         if not (0 <= hh <= 23 and 0 <= mm <= 59): raise ValueError('Hora inválida.')
         env=str(f.get('environment','TEST')).upper()
         selected=[str(x).upper() for x in f.getlist('bank_sources') if str(x).strip()]
-        if len(selected)<3: raise ValueError('Seleccione al menos 3 fuentes bancarias para comparación.')
+        if len(selected)<1: raise ValueError('Seleccione al menos una fuente bancaria.')
         primary=str(f.get('primary_bank','')).upper().strip()
         if primary not in selected: raise ValueError('La fuente oficial debe estar incluida entre las fuentes de comparación.')
-        secondary=next((x for x in selected if x!=primary),selected[1])
+        secondary=next((x for x in selected if x!=primary),primary)
         currencies_csv=str(f.get('currencies_csv','USD,EUR')).upper().replace(' ','')
         use_usd='USD' in currencies_csv.split(','); use_eur='EUR' in currencies_csv.split(',')
         new_id=store.upsert_company(company_id=cid,company_name=str(f.get('company_name','')),database_name=str(f.get('database_name','')),db_type=str(f.get('db_type','HANA')),environment=env,enabled='enabled' in f,allow_write='allow_write' in f,scheduled_write='scheduled_write' in f,auto_enabled='auto_enabled' in f,schedule_hour=hh,schedule_minute=mm,use_usd=use_usd,use_eur=use_eur,sap_user=str(f.get('sap_user','')),primary_bank=primary,secondary_bank=secondary,service_layer_root=str(f.get('service_layer_root','')),odata_version=str(f.get('odata_version','')),sap_b1_version=_cfg().get('sap_b1_version','10.0'),bank_source_codes=','.join(selected),currencies_csv=currencies_csv)

@@ -72,3 +72,18 @@ def test_bch_preset_exposes_only_usd_reference(monkeypatch):
     },Settings())
     assert snap.rates=={"USD":{"buy":Decimal("26.8920"),"sell":Decimal("26.8920")}}
     assert "EUR" not in snap.rates
+
+
+def test_bch_parser_finds_headers_below_title_and_reordered_columns():
+    wb=Workbook()
+    ws=wb.active
+    ws.title="Resultados"
+    ws.append(["BANCO CENTRAL DE HONDURAS"])
+    ws.append(["Tipo de Cambio de Referencia"])
+    ws.append([None,None,None])
+    ws.append(["TCR", "Observaciones", "FECHA"])
+    ws.append([26.892, None, date(2026,10,6)])
+    out=BytesIO(); wb.save(out); wb.close()
+    result=parse_bch_xlsx(out.getvalue(),Settings(),today=date(2026,10,7))
+    assert result.tcr==Decimal("26.892")
+    assert result.observed_date==date(2026,10,6)

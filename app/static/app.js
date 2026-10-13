@@ -20,6 +20,96 @@
   const rootInput=document.querySelector('input[name="service_layer_root"]'),verInput=document.querySelector('select[name="odata_version"]'),preview=document.querySelector('[data-endpoint-preview]');
   const endpointPreview=()=>{if(!preview||!rootInput||!verInput)return;const clean=(rootInput.value||'').replace(/\/$/,'').replace(/\/v\d+$/i,'');preview.textContent=`${clean}/${verInput.value||'v2'}`};rootInput?.addEventListener('input',endpointPreview);verInput?.addEventListener('change',endpointPreview);endpointPreview();
 
+
+  // Step-by-step setup with non-sensitive draft recovery ----------------
+  const setupForm=document.querySelector('form.setup-form');
+  if(setupForm){
+    setupForm.dataset.noGuard='true';
+    setupForm.noValidate=true;
+    const sections=[...setupForm.querySelectorAll('.setup-card')];
+    const chips=[...document.querySelectorAll('.setup-steps > span')];
+    const key='atas-setup-draft-v1';
+    let step=0;
+    const nav=document.createElement('div');
+    nav.className='setup-navigation';
+    nav.innerHTML='<span data-setup-position></span><div><button type="button" class="btn secondary" data-setup-back>← Anterior</button> <button type="button" class="btn primary" data-setup-next>Siguiente →</button></div>';
+    setupForm.appendChild(nav);
+    const alerts=document.createElement('div');alerts.className='setup-error';alerts.hidden=true;
+    setupForm.prepend(alerts);
+    const setError=(message)=>{alerts.textContent=message;alerts.hidden=!message;if(message)alerts.scrollIntoView({block:'center'})};
+    const show=(index)=>{
+      step=Math.max(0,Math.min(index,sections.length-1));
+      sections.forEach((section,i)=>{section.hidden=i!==step;section.classList.toggle('setup-active',i===step)});
+      chips.forEach((chip,i)=>{chip.classList.toggle('active',i===step);chip.classList.toggle('completed',i<step)});
+      nav.querySelector('[data-setup-back]').disabled=step===0;
+      nav.querySelector('[data-setup-next]').textContent=step===sections.length-1?'Revisar y guardar ✓':'Siguiente →';
+      nav.querySelector('[data-setup-position]').textContent='Paso '+(step+1)+' de '+sections.length;
+      setError('');
+    };
+    const draft=()=>{
+      const values={};
+      setupForm.querySelectorAll('input,select,textarea').forEach(el=>{
+        if(!el.name||el.type==='password'||el.type==='file'||el.type==='hidden')return;
+        (values[el.name]??=[]).push(el.type==='checkbox'?el.checked:el.value);
+      });
+      try{sessionStorage.setItem(key,JSON.stringify({values,step,companyRows:setupForm.querySelectorAll('[data-company-row]').length}))}catch(_){}
+    };
+    try{
+      const saved=JSON.parse(sessionStorage.getItem(key)||'null');
+      if(saved?.values){
+        const companyList=setupForm.querySelector('[data-company-list]');
+        const companyTemplate=setupForm.querySelector('#company-row-template');
+        while(companyList&&companyTemplate&&companyList.querySelectorAll('[data-company-row]').length<Math.min(saved.companyRows||1,25)){
+          companyList.appendChild(companyTemplate.content.cloneNode(true));
+        }
+        renumber();syncSharedCreds();
+        const positions={};
+        setupForm.querySelectorAll('input,select,textarea').forEach(el=>{
+          if(!el.name||el.type==='password'||el.type==='file'||el.type==='hidden')return;
+          const i=positions[el.name]||0;positions[el.name]=i+1;
+          const value=saved.values[el.name]?.[i];
+          if(value===undefined)return;
+          if(el.type==='checkbox')el.checked=!!value;
+          else el.value=value;
+        });
+        step=saved.step||0;
+      }
+    }catch(_){}
+    setupForm.addEventListener('input',draft);
+    setupForm.addEventListener('change',draft);
+    chips.forEach((chip,i)=>{chip.tabIndex=0;chip.setAttribute('role','button');chip.onclick=()=>{draft();show(i)};chip.onkeydown=e=>{if(e.key==='Enter')show(i)}});
+    nav.querySelector('[data-setup-back]').onclick=()=>{draft();show(step-1)};
+    const validateStep=()=>{
+      const fields=[...sections[step].querySelectorAll('[required]')].filter(el=>!el.disabled&&!el.closest('.hidden-by-shared'));
+      const invalid=fields.find(el=>!el.checkValidity());
+      if(invalid){invalid.reportValidity();return false}return true;
+    };
+    nav.querySelector('[data-setup-next]').onclick=()=>{
+      if(!validateStep())return;
+      draft();
+      if(step===sections.length-1)setupForm.requestSubmit();
+      else show(step+1);
+    };
+    setupForm.addEventListener('submit',async e=>{
+      e.preventDefault();if(!validateStep())return;
+      draft();setError('');
+      nav.querySelector('[data-setup-next]').disabled=true;
+      try{
+        const res=await fetch('/setup',{method:'POST',body:new FormData(setupForm),credentials:'same-origin'});
+        if(res.ok||res.redirected){sessionStorage.removeItem(key);location.assign(res.url&&new URL(res.url).pathname!='/setup'?res.url:'/login?welcome=1');return}
+        const html=await res.text();
+        const doc=new DOMParser().parseFromString(html,'text/html');
+        const error=doc.querySelector('.setup-error');
+        const message=error?.textContent?.trim()||'No se pudo guardar. Revise la configuración.';
+        setError(message);
+        const match=message.match(/(?:fuente|banco|BCH|TCR)/i);
+        if(match){show(5);setError(message)}
+      }catch(err){setError('No fue posible contactar al servidor. Los datos ingresados siguen en pantalla.')}
+      finally{nav.querySelector('[data-setup-next]').disabled=false}
+    });
+    show(step);
+  }
+
   // Toast --------------------------------------------------------------
   const layer=document.createElement('div');layer.className='toast-layer';document.body.appendChild(layer);
   const toast=(title,msg='',type='ok',timeout=4500)=>{const e=document.createElement('div');e.className=`toast-card ${type}`;e.innerHTML=`<div class="toast-icon">${type==='bad'?'!':type==='warn'?'•':'✓'}</div><div><b>${title}</b><span>${msg}</span></div><button>×</button>`;e.querySelector('button').onclick=()=>e.remove();layer.appendChild(e);requestAnimationFrame(()=>e.classList.add('show'));setTimeout(()=>{e.classList.remove('show');setTimeout(()=>e.remove(),250)},timeout)};window.SapFxToast=toast;
