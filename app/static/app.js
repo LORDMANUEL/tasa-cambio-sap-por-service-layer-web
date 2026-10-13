@@ -52,11 +52,17 @@
         if(!el.name||el.type==='password'||el.type==='file'||el.type==='hidden')return;
         (values[el.name]??=[]).push(el.type==='checkbox'?el.checked:el.value);
       });
-      try{sessionStorage.setItem(key,JSON.stringify({values,step}))}catch(_){}
+      try{sessionStorage.setItem(key,JSON.stringify({values,step,companyRows:setupForm.querySelectorAll('[data-company-row]').length}))}catch(_){}
     };
     try{
       const saved=JSON.parse(sessionStorage.getItem(key)||'null');
       if(saved?.values){
+        const companyList=setupForm.querySelector('[data-company-list]');
+        const companyTemplate=setupForm.querySelector('#company-row-template');
+        while(companyList&&companyTemplate&&companyList.querySelectorAll('[data-company-row]').length<Math.min(saved.companyRows||1,25)){
+          companyList.appendChild(companyTemplate.content.cloneNode(true));
+        }
+        renumber();syncSharedCreds();
         const positions={};
         setupForm.querySelectorAll('input,select,textarea').forEach(el=>{
           if(!el.name||el.type==='password'||el.type==='file'||el.type==='hidden')return;
