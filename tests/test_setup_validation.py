@@ -58,6 +58,7 @@ def test_setup_stage_validation_by_page(monkeypatch):
     from fastapi.testclient import TestClient
     import app.main as m
     monkeypatch.setattr(m, "_setup_complete", lambda: False)
+    monkeypatch.setattr(m, "fetch_source",lambda source,settings: __import__("types").SimpleNamespace(rates={"USD":{"buy":1,"sell":1}}))
     with TestClient(m.app) as client:
         assert client.get("/setup?step=3").status_code == 200
         bad = client.post("/setup/validate-step", data={"_step":"1","organization_name":""})
