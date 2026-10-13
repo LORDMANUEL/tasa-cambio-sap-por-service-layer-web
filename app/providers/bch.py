@@ -78,17 +78,17 @@ def parse_bch_xlsx(content: bytes, settings: Settings, *, today: date | None=Non
         # within the first 35 rows rather than assuming A1/B1.
         def norm(v):
             s=unicodedata.normalize("NFKD", str(v or "").upper())
-            return re.sub(r"\\s+", " ", "".join(ch for ch in s if not unicodedata.combining(ch))).strip()
+            return re.sub(r"\s+", " ", "".join(ch for ch in s if not unicodedata.combining(ch))).strip()
         def rate_col(s):
-            return bool(re.search(r"\\bTCR\\b|TIPO DE CAMBIO DE REFERENCIA|TASA DE CAMBIO DE REFERENCIA",s))
+            return bool(re.search(r"\bTCR\b|TIPO DE CAMBIO DE REFERENCIA|TASA DE CAMBIO DE REFERENCIA",s))
         for ws in wb.worksheets:
             rows=ws.iter_rows(values_only=True)
             header=None
             for rowno,row in enumerate(rows,1):
                 if rowno>35: break
                 vals=[norm(v) for v in row]
-                dates=[i for i,x in enumerate(vals) if re.search(r"\\bFECHA\\b|\\bDIA\\b",x)]
-                rates=[i for i,x in enumerate(vals) if rate_col(x) and not re.search(r"COMPRA|VENTA|VARIACION|VAR\\.",x)]
+                dates=[i for i,x in enumerate(vals) if re.search(r"\bFECHA\b|\bDIA\b",x)]
+                rates=[i for i,x in enumerate(vals) if rate_col(x) and not re.search(r"COMPRA|VENTA|VARIACION|VAR\.",x)]
                 if dates and rates:
                     pairs=[(d,r) for d in dates for r in rates if d!=r]
                     if pairs:
