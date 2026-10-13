@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 from fastapi import FastAPI, Request, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
@@ -147,9 +147,72 @@ def _setup_page(error:str='')->str:
     return layout('Configuración inicial',body,setup=True)
 
 @app.get('/setup',response_class=HTMLResponse)
-def setup_get():
+def setup_get(step: int = 1):
     if _setup_complete(): return RedirectResponse('/login',303)
     return HTMLResponse(_setup_page())
+
+@app.post('/setup/validate-step')
+async def setup_validate_step(req: Request):
+    if _setup_complete(): return JSONResponse({'ok':False,'error':'Configuración ya completada.'},status_code=409)
+    form=await req.form()
+    try:
+        step=int(form.get('_step','0'))
+        if not 1 <= step <= 8: raise ValueError('Paso de configuración inválido.')
+        if step==1 and not str(form.get('organization_name','')).strip():
+            raise ValueError('Indique el nombre de la empresa.')
+        if step==2 and (not str(form.get('admin_user','')).strip() or len(str(form.get('admin_password','')))<6):
+            raise ValueError('Indique usuario administrador y contraseña de al menos 6 caracteres.')
+        if step==3 and 'notifications_enabled' in form:
+            host=str(form.get('smtp_host','')).strip()
+            if not host: raise ValueError('Ingrese el servidor SMTP o desactive las notificaciones.')
+            port=int(form.get('smtp_port','587'))
+            if not 1 <= port <= 65535: raise ValueError('Puerto SMTP fuera de rango.')
+        if step==4:
+            root=str(form.get('service_layer_root','')).strip()
+            if not root.startswith(('https://','http://')) or '/b1s' not in root:
+                raise ValueError('Service Layer debe ser una URL válida que incluya /b1s.')
+        if step==5:
+            names=[str(v).strip() for v in form.getlist('database_name')]
+            if not names or not all(names) or len(set(names))!=len(names):
+                raise ValueError('Ingrese CompanyDB distintas para cada base SAP.')
+            if 'same_sap_credentials' in form:
+                if not str(form.get('shared_sap_user','')).strip() or not str(form.get('shared_sap_password','')):
+                    raise ValueError('Ingrese credenciales SAP compartidas.')
+            elif not all(str(x).strip() for x in form.getlist('sap_user')) or not all(str(x) for x in form.getlist('sap_password')):
+                raise ValueError('Ingrese usuario y clave SAP para cada base.')
+        if step==6:
+            scodes=form.getlist('source_code')
+            names=form.getlist('source_name')
+            types=form.getlist('source_type')
+            urls=form.getlist('source_url')
+            configs=form.getlist('source_config')
+            sources=[str(s).strip().upper() for s in scodes if str(s).strip()]
+            if not sources or len(set(sources))!=len(sources):
+                raise ValueError('Registre al menos un banco con código único.')
+            valid=[]; failures=[]
+            for i,code in enumerate(scodes):
+                code=str(code).strip().upper()
+                if not code: continue
+                source={'code':code,'name':str(names[i] if i<len(names) else code),
+                        'source_type':str(types[i] if i<len(types) else 'WEB_HTML'),
+                        'url':str(urls[i] if i<len(urls) else ''),
+                        'config_json':str(configs[i] if i<len(configs) else '{}'),
+                        'headers_json':'{}','timeout_seconds':10,'tls_verify':1}
+                try:
+                    snapshot=fetch_source(source,settings)
+                    validate_snapshot_pairs(snapshot,store.get_settings().get('max_pair_spread_percent','35.0'))
+                    valid.append(code)
+                except Exception as exc:
+                    failures.append(f'{code}: {exc}')
+            if not valid:
+                raise ValueError('Ninguna fuente bancaria pasó la validación. '+' | '.join(failures))
+        if step==7:
+            hh,mm=[int(x) for x in str(form.get('schedule_time','06:00')).split(':',1)]
+            if not 0<=hh<=23 or not 0<=mm<=59: raise ValueError('Hora de ejecución inválida.')
+            ZoneInfo(str(form.get('timezone','America/Tegucigalpa')).strip())
+        return {'ok':True,'step':step}
+    except Exception as exc:
+        return JSONResponse({'ok':False,'error':str(exc)},status_code=422)
 
 @app.post('/setup')
 async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
@@ -229,7 +292,7 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
         use_usd='USD' in currencies_csv.split(','); use_eur='EUR' in currencies_csv.split(',')
         primary=str(form.get('primary_bank',valid_sources[0])).strip().upper()
         if primary not in valid_sources: primary=valid_sources[0]
-        secondary=next((x for x in valid_sources if x!=primary),valid_sources[1])
+        secondary=next((x for x in valid_sources if x!=primary),primary)
         all_sources=','.join(valid_sources)
         for i,name in enumerate(names):
             user=shared_user if same else (users[i] if i<len(users) else '')
@@ -276,10 +339,10 @@ def _company_form(c:dict|None=None)->str:
     env=c.get('environment','TEST'); dbt=c.get('db_type','HANA'); od=c.get('odata_version','')
     selected=set(x.strip().upper() for x in str(c.get('bank_source_codes') or '').split(',') if x.strip())
     if not selected: selected=set(x['code'].upper() for x in sources[:3])
-    source_checks=''.join(f"<label><input type='checkbox' name='bank_sources' value='{esc(x['code'])}' {'checked' if x['code'].upper() in selected else ''}> {esc(x['name'])} <small>{esc(x['country'])}</small></label>" for x in sources) or "<span class='muted'>Primero configure al menos 3 fuentes en Bancos.</span>"
+    source_checks=''.join(f"<label><input type='checkbox' name='bank_sources' value='{esc(x['code'])}' {'checked' if x['code'].upper() in selected else ''}> {esc(x['name'])} <small>{esc(x['country'])}</small></label>" for x in sources) or "<span class='muted'>Primero configure al menos una fuente en Bancos.</span>"
     primary_opts=''.join(f"<option value='{esc(x['code'])}' {'selected' if x['code'].upper()==str(c.get('primary_bank') or '').upper() else ''}>{esc(x['name'])}</option>" for x in sources)
     currencies=esc(c.get('currencies_csv') or ('USD,EUR' if c.get('use_eur',0) else 'USD'))
-    return f"""<form class='card company-editor' method='post' action='/companies/save' data-process='Guardando base SAP'><input type='hidden' name='company_id' value='{c.get('id','')}'><div class='section-title'><h2>{'Editar base' if c else 'Agregar base SAP'}</h2><span class='pill'>Multiempresa</span></div><div class='form-grid cols3'><div><label>Nombre empresa/base</label><input name='company_name' value='{esc(c.get('company_name',''))}' required></div><div><label>Tipo de BD</label><select name='db_type'><option {'selected' if dbt=='HANA' else ''}>HANA</option><option value='SQLSERVER' {'selected' if dbt=='SQLSERVER' else ''}>SQL Server</option></select></div><div><label>CompanyDB</label><input name='database_name' value='{esc(c.get('database_name',''))}' required></div><div><label>Ambiente</label><select name='environment'><option value='TEST' {'selected' if env=='TEST' else ''}>TEST</option><option value='PROD' {'selected' if env=='PROD' else ''}>PROD</option></select></div><div><label>Usuario SAP</label><input name='sap_user' value='{esc(c.get('sap_user',''))}' required></div><div><label>Contraseña SAP</label><input type='password' name='sap_password' placeholder='Dejar vacío para conservar'></div><div class='span2'><label>Service Layer propio <span class='optional'>opcional</span></label><input name='service_layer_root' value='{esc(c.get('service_layer_root',''))}' placeholder='{esc(cfg.get('service_layer_root',''))}'></div><div><label>OData propio</label><select name='odata_version'><option value='' {'selected' if not od else ''}>Predeterminado</option><option value='v2' {'selected' if od=='v2' else ''}>v2</option><option value='v1' {'selected' if od=='v1' else ''}>v1</option></select></div><div><label>Fuente oficial</label><select name='primary_bank' required>{primary_opts}</select></div><div><label>Monedas</label><input name='currencies_csv' value='{currencies}' placeholder='USD,EUR' required></div><div><label>Hora diaria</label><input type='time' name='schedule_time' value='{int(c.get('schedule_hour',6)):02d}:{int(c.get('schedule_minute',0)):02d}'></div></div><div class='source-selector'><div class='section-title'><div><h3>Fuentes de comparación</h3><p>Mínimo 3 fuentes activas; la fuente oficial debe estar incluida.</p></div><a href='/banks' class='btn secondary'>Administrar fuentes</a></div><div class='check-pills wide'>{source_checks}</div></div><div class='check-pills wide'><label><input type='checkbox' name='enabled' {'checked' if c.get('enabled',1) else ''}> Base activa</label><label><input type='checkbox' name='auto_enabled' {'checked' if c.get('auto_enabled',1 if not c else 0) else ''}> Automatización diaria</label><label><input type='checkbox' name='allow_write' {'checked' if c.get('allow_write',env=='TEST') else ''}> Escritura manual TEST</label><label><input type='checkbox' name='scheduled_write' {'checked' if c.get('scheduled_write',0) else ''}> Autorizar escritura automática</label></div><div class='endpoint-preview'><span>Endpoint efectivo</span><code>{esc(_effective_company_endpoint(c) if c else _endpoint(cfg.get('service_layer_root',''),cfg.get('odata_version','v2')))}</code></div><button class='btn primary'>Guardar base</button></form>"""
+    return f"""<form class='card company-editor' method='post' action='/companies/save' data-process='Guardando base SAP'><input type='hidden' name='company_id' value='{c.get('id','')}'><div class='section-title'><h2>{'Editar base' if c else 'Agregar base SAP'}</h2><span class='pill'>Multiempresa</span></div><div class='form-grid cols3'><div><label>Nombre empresa/base</label><input name='company_name' value='{esc(c.get('company_name',''))}' required></div><div><label>Tipo de BD</label><select name='db_type'><option {'selected' if dbt=='HANA' else ''}>HANA</option><option value='SQLSERVER' {'selected' if dbt=='SQLSERVER' else ''}>SQL Server</option></select></div><div><label>CompanyDB</label><input name='database_name' value='{esc(c.get('database_name',''))}' required></div><div><label>Ambiente</label><select name='environment'><option value='TEST' {'selected' if env=='TEST' else ''}>TEST</option><option value='PROD' {'selected' if env=='PROD' else ''}>PROD</option></select></div><div><label>Usuario SAP</label><input name='sap_user' value='{esc(c.get('sap_user',''))}' required></div><div><label>Contraseña SAP</label><input type='password' name='sap_password' placeholder='Dejar vacío para conservar'></div><div class='span2'><label>Service Layer propio <span class='optional'>opcional</span></label><input name='service_layer_root' value='{esc(c.get('service_layer_root',''))}' placeholder='{esc(cfg.get('service_layer_root',''))}'></div><div><label>OData propio</label><select name='odata_version'><option value='' {'selected' if not od else ''}>Predeterminado</option><option value='v2' {'selected' if od=='v2' else ''}>v2</option><option value='v1' {'selected' if od=='v1' else ''}>v1</option></select></div><div><label>Fuente oficial</label><select name='primary_bank' required>{primary_opts}</select></div><div><label>Monedas</label><input name='currencies_csv' value='{currencies}' placeholder='USD,EUR' required></div><div><label>Hora diaria</label><input type='time' name='schedule_time' value='{int(c.get('schedule_hour',6)):02d}:{int(c.get('schedule_minute',0)):02d}'></div></div><div class='source-selector'><div class='section-title'><div><h3>Fuentes de comparación</h3><p>Mínimo una fuente activa; la fuente preferida debe estar incluida.</p></div><a href='/banks' class='btn secondary'>Administrar fuentes</a></div><div class='check-pills wide'>{source_checks}</div></div><div class='check-pills wide'><label><input type='checkbox' name='enabled' {'checked' if c.get('enabled',1) else ''}> Base activa</label><label><input type='checkbox' name='auto_enabled' {'checked' if c.get('auto_enabled',1 if not c else 0) else ''}> Automatización diaria</label><label><input type='checkbox' name='allow_write' {'checked' if c.get('allow_write',env=='TEST') else ''}> Escritura manual TEST</label><label><input type='checkbox' name='scheduled_write' {'checked' if c.get('scheduled_write',0) else ''}> Autorizar escritura automática</label></div><div class='endpoint-preview'><span>Endpoint efectivo</span><code>{esc(_effective_company_endpoint(c) if c else _endpoint(cfg.get('service_layer_root',''),cfg.get('odata_version','v2')))}</code></div><button class='btn primary'>Guardar base</button></form>"""
 
 @app.get('/companies',response_class=HTMLResponse)
 def companies_page(req:Request, edit:int|None=None):
