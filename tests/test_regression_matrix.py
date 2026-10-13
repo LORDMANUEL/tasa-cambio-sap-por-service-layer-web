@@ -175,7 +175,7 @@ def test_html_regex_regression_matrix(buy,sell):
     config={
         "mode":"REGEX",
         "currencies":["USD"],
-        "mapping":{"USD":{"regex":r"USD.*?Compra:\\s*(?P<buy>[0-9.]+).*?Venta:\\s*(?P<sell>[0-9.]+)"}},
+        "mapping":{"USD":{"regex":r"USD.*?Compra:[ ]*(?P<buy>[0-9.]+).*?Venta:[ ]*(?P<sell>[0-9.]+)"}},
     }
     out=_extract_html(html,config)
     assert out["USD"]["buy"]==Decimal(buy)
