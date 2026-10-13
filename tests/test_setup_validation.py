@@ -52,3 +52,21 @@ def test_wizard_has_individual_steps_and_recovery_hooks():
     assert "el.type==='password'" in script
     assert "new FormData(setupForm)" in script
     assert "setError(message)" in script
+
+
+def test_setup_stage_validation_by_page(monkeypatch):
+    from fastapi.testclient import TestClient
+    import app.main as m
+    monkeypatch.setattr(m, "_setup_complete", lambda: False)
+    with TestClient(m.app) as client:
+        assert client.get("/setup?step=3").status_code == 200
+        bad = client.post("/setup/validate-step", data={"_step":"1","organization_name":""})
+        assert bad.status_code == 422
+        assert "empresa" in bad.json()["error"]
+        good = client.post("/setup/validate-step", data={"_step":"1","organization_name":"Demo"})
+        assert good.status_code == 200
+        assert good.json()["step"] == 1
+        empty_banks = client.post("/setup/validate-step",data={"_step":"6"})
+        assert empty_banks.status_code == 422
+        one_bank = client.post("/setup/validate-step",data={"_step":"6","source_code":"BANPAIS"})
+        assert one_bank.status_code == 200
