@@ -364,7 +364,9 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
             existing_company=store.get_company_by_database(str(dbs[i]).strip())
             cid=store.upsert_company(company_id=existing_company['id'] if existing_company else None,company_name=name,database_name=dbs[i],db_type=types[i] if i<len(types) else 'HANA',environment=env,enabled=True,allow_write=env=='TEST',scheduled_write=True,auto_enabled=True,schedule_hour=hh,schedule_minute=mm,use_usd=use_usd,use_eur=use_eur,sap_user=user,primary_bank=primary,secondary_bank=secondary,service_layer_root=roots[i] if i<len(roots) else '',odata_version=ods[i] if i<len(ods) else '',sap_b1_version=sap_ver,bank_source_codes=all_sources,currencies_csv=currencies_csv)
             store.set_secret_blob(cid,encrypt_secret(pwd))
-        store.set_settings({'setup_complete':'true'})\n        draft_id=_setup_draft_id(req)\n        if draft_id: store.delete_setup_draft(draft_id)
+        store.set_settings({'setup_complete':'true'})
+        draft_id=_setup_draft_id(req)
+        if draft_id: store.delete_setup_draft(draft_id)
         r=RedirectResponse('/?welcome=1',303); r.set_cookie(COOKIE,sign_session(admin_user,settings.web_session_secret),httponly=True,samesite='strict',secure=False,max_age=28800); return r
     except Exception as exc:
         log.exception('Initial setup failed')
