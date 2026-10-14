@@ -71,3 +71,56 @@ def test_setup_stage_validation_by_page(monkeypatch):
         assert empty_banks.status_code == 422
         one_bank = client.post("/setup/validate-step",data={"_step":"6","source_code":"BANPAIS"})
         assert one_bank.status_code == 200
+
+
+def test_setup_draft_persists_without_secrets(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    import app.main as m
+    from app.store import Store
+    st=Store(tmp_path / "wizard.db")
+    monkeypatch.setattr(m, "store", st)
+    monkeypatch.setattr(m, "_setup_complete", lambda: False)
+    with TestClient(m.app) as client:
+        response=client.post("/setup/draft",json={
+            "step":4,"companyRows":2,"values":{
+                "organization_name":["Demo"],
+                "admin_password":["DO_NOT_STORE"],
+                "shared_sap_password":["DO_NOT_STORE"],
+                "source_secret_headers":["DO_NOT_STORE"],
+                "source_config":['{"key":"DO_NOT_STORE"}'],
+                "database_name":["ONE","TWO"],
+            },
+        })
+        assert response.status_code==200
+        restored=client.get("/setup/draft").json()["draft"]
+        assert restored["step"]==4
+        assert restored["values"]["database_name"]==["ONE","TWO"]
+        assert "DO_NOT_STORE" not in str(restored)
+        from app.store import Store as Again
+        assert Again(tmp_path / "wizard.db").get_setup_draft(response.cookies["atas_setup_id"]) is not None
+
+
+def test_step_five_probes_real_service_layer_login_and_logout(monkeypatch):
+    from fastapi.testclient import TestClient
+    from types import SimpleNamespace
+    import app.main as m
+    monkeypatch.setattr(m, "_setup_complete", lambda: False)
+    called=[]
+    class SapStub:
+        def __init__(self, url, company, user, password, **kwargs):
+            assert password=="secret"
+            assert not company.allow_write
+            called.append(("init",url,company.company_db))
+        def login(self): called.append(("login",))
+        def logout(self): called.append(("logout",))
+    monkeypatch.setattr(m,"SapFxClient",SapStub)
+    with TestClient(m.app) as client:
+        response=client.post("/setup/validate-step",data={
+            "_step":"5","database_name":"SBODEMO",
+            "same_sap_credentials":"on","shared_sap_user":"it01",
+            "shared_sap_password":"secret",
+            "service_layer_root":"https://sap.example.com:50000/b1s",
+            "odata_version":"v2",
+        })
+        assert response.status_code==200
+        assert called==[("init","https://sap.example.com:50000/b1s/v2","SBODEMO"),("login",),("logout",)]
