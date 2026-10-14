@@ -52,7 +52,7 @@
     const draft=()=>{
       const values={};
       setupForm.querySelectorAll('input,select,textarea').forEach(el=>{
-        if(!el.name||el.type==='password'||el.type==='file'||el.type==='hidden')return;
+        if(!el.name||el.type==='password'||el.type==='file'||el.type==='hidden'||el.name==='source_config')return;
         (values[el.name]??=[]).push(el.type==='checkbox'?el.checked:el.value);
       });
       const payload={values,step,companyRows:setupForm.querySelectorAll('[data-company-row]').length};
