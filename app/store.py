@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS companies (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS app_settings (
+CREATE TABLE IF NOT EXISTS setup_drafts (\n  draft_id TEXT PRIMARY KEY,\n  draft_json TEXT NOT NULL,\n  updated_at TEXT NOT NULL\n);\nCREATE TABLE IF NOT EXISTS app_settings (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -148,6 +148,24 @@ class Store:
             con.commit()
         finally:
             con.close()
+
+    def save_setup_draft(self, draft_id: str, payload: str) -> None:
+        """Persist only caller-sanitized non-secret wizard fields."""
+        with self.conn() as con:
+            con.execute(
+                "INSERT INTO setup_drafts(draft_id,draft_json,updated_at) VALUES(?,?,?) "
+                "ON CONFLICT(draft_id) DO UPDATE SET draft_json=excluded.draft_json,updated_at=excluded.updated_at",
+                (draft_id, payload, self.now()),
+            )
+
+    def get_setup_draft(self, draft_id: str) -> str | None:
+        with self.conn() as con:
+            row=con.execute("SELECT draft_json FROM setup_drafts WHERE draft_id=?", (draft_id,)).fetchone()
+            return row["draft_json"] if row else None
+
+    def delete_setup_draft(self, draft_id: str) -> None:
+        with self.conn() as con:
+            con.execute("DELETE FROM setup_drafts WHERE draft_id=?", (draft_id,))
 
     def _migrate_companies(self, con: sqlite3.Connection) -> None:
         existing = {r[1] for r in con.execute("PRAGMA table_info(companies)").fetchall()}

@@ -30,7 +30,7 @@
     const chips=[...document.querySelectorAll('.setup-steps > span')];
     const key='atas-setup-draft-v1';
     const slugs=['empresa','administrador','notificaciones','service-layer','bases-sap','bancos','automatizacion','finalizar'];
-    let step=0;
+    let step=0;let setupSaveTimer=null;
     const nav=document.createElement('div');
     nav.className='setup-navigation';
     nav.innerHTML='<span data-setup-position></span><div><button type="button" class="btn secondary" data-setup-back>← Anterior</button> <button type="button" class="btn primary" data-setup-next>Siguiente →</button></div>';
@@ -52,10 +52,15 @@
     const draft=()=>{
       const values={};
       setupForm.querySelectorAll('input,select,textarea').forEach(el=>{
-        if(!el.name||el.type==='password'||el.type==='file'||el.type==='hidden')return;
+        if(!el.name||el.type==='password'||el.type==='file'||el.type==='hidden'||el.name==='source_config')return;
         (values[el.name]??=[]).push(el.type==='checkbox'?el.checked:el.value);
       });
-      try{sessionStorage.setItem(key,JSON.stringify({values,step,companyRows:setupForm.querySelectorAll('[data-company-row]').length}))}catch(_){}
+      const payload={values,step,companyRows:setupForm.querySelectorAll('[data-company-row]').length};
+      try{sessionStorage.setItem(key,JSON.stringify(payload))}catch(_){}
+      clearTimeout(setupSaveTimer);
+      setupSaveTimer=setTimeout(()=>{
+        fetch('/setup/draft',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),credentials:'same-origin'}).catch(()=>{});
+      },350);
     };
     try{
       const saved=JSON.parse(sessionStorage.getItem(key)||'null');
@@ -121,6 +126,20 @@
     });
     const requested=Number(new URLSearchParams(location.search).get('step'));
     show(Number.isInteger(requested)&&requested>=1&&requested<=8?requested-1:step,false);
+    fetch('/setup/draft',{credentials:'same-origin'}).then(res=>res.json()).then(result=>{
+      if(!result.draft||sessionStorage.getItem(key))return;
+      const saved=result.draft;
+      const companyList=setupForm.querySelector('[data-company-list]');const tpl=setupForm.querySelector('#company-row-template');
+      while(companyList&&tpl&&companyList.querySelectorAll('[data-company-row]').length<Math.min(saved.companyRows||1,25))companyList.appendChild(tpl.content.cloneNode(true));
+      const positions={};
+      setupForm.querySelectorAll('input,select,textarea').forEach(el=>{
+        if(!el.name||el.type==='password'||el.type==='file'||el.type==='hidden')return;
+        const i=positions[el.name]||0;positions[el.name]=i+1;
+        const value=saved.values?.[el.name]?.[i];if(value===undefined)return;
+        if(el.type==='checkbox')el.checked=!!value;else el.value=value;
+      });
+      renumber();syncSharedCreds();show(saved.step||0,false);
+    }).catch(()=>{});
   }
 
   // Toast --------------------------------------------------------------

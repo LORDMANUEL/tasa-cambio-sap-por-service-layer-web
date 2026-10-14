@@ -6,7 +6,7 @@ per-company Service Layer overrides, optional outgoing email notifications and
 custom branding.
 """
 from __future__ import annotations
-import csv, io, logging, os, re, time, secrets
+import csv, io, logging, os, re, time, secrets, json
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +23,7 @@ from app.web_auth import COOKIE, sign_session, verify_session, verify_password, 
 from app.dashboard import layout, esc, badge, page_header
 from app.providers import get_provider
 from app.market_sources import fetch_source, scan_source, validate_snapshot_pairs, MarketSourceError
+from app.sap_client import SapCompany, SapFxClient
 from app.sync_engine import inspect_company, write_suggested_manual, run_due_schedules, reconcile_company, _run_status
 from app.notifications import send_email, send_run_summary, recipients_from_text
 from app.version import get_version
@@ -151,6 +152,43 @@ def setup_get(step: int = 1):
     if _setup_complete(): return RedirectResponse('/login',303)
     return HTMLResponse(_setup_page())
 
+# Setup progress is persisted per random HttpOnly cookie, never by password.
+_SETUP_COOKIE='atas_setup_id'
+_SECRET_FIELDS={'admin_password','shared_sap_password','sap_password','smtp_password','source_secret_headers','sap_secret','source_config','headers_json'}
+def _setup_draft_id(req: Request) -> str | None:
+    value=req.cookies.get(_SETUP_COOKIE,'')
+    return value if re.fullmatch(r'[a-f0-9]{64}',value) else None
+
+@app.get('/setup/draft')
+def setup_draft_get(req: Request):
+    if _setup_complete(): return JSONResponse({'ok':False},status_code=409)
+    draft_id=_setup_draft_id(req)
+    raw=store.get_setup_draft(draft_id) if draft_id else None
+    return {'ok':True,'draft':json.loads(raw) if raw else None}
+
+@app.post('/setup/draft')
+async def setup_draft_save(req: Request):
+    if _setup_complete(): return JSONResponse({'ok':False},status_code=409)
+    try:
+        data=await req.json()
+        if not isinstance(data,dict) or len(json.dumps(data))>65536: raise ValueError('Borrador demasiado grande.')
+        raw=data.get('values')
+        if not isinstance(raw,dict): raise ValueError('Borrador inválido.')
+        clean={}
+        for name,values in raw.items():
+            if not isinstance(name,str) or len(name)>80 or 'password' in name.lower() or 'secret' in name.lower() or name.lower() in _SECRET_FIELDS:
+                continue
+            if not isinstance(values,list) or len(values)>40: continue
+            clean[name]=[v for v in values if isinstance(v,(str,bool)) and (not isinstance(v,str) or len(v)<4096)]
+        draft={'step':min(7,max(0,int(data.get('step',0)))), 'companyRows':min(25,max(1,int(data.get('companyRows',1)))),'values':clean}
+        draft_id=_setup_draft_id(req) or secrets.token_hex(32)
+        store.save_setup_draft(draft_id,json.dumps(draft,ensure_ascii=False))
+        response=JSONResponse({'ok':True})
+        response.set_cookie(_SETUP_COOKIE,draft_id,httponly=True,samesite='strict',secure=False,max_age=604800)
+        return response
+    except (ValueError,TypeError,OverflowError) as exc:
+        return JSONResponse({'ok':False,'error':str(exc)},status_code=422)
+
 @app.post('/setup/validate-step')
 async def setup_validate_step(req: Request):
     if _setup_complete(): return JSONResponse({'ok':False,'error':'Configuración ya completada.'},status_code=409)
@@ -180,6 +218,30 @@ async def setup_validate_step(req: Request):
                     raise ValueError('Ingrese credenciales SAP compartidas.')
             elif not all(str(x).strip() for x in form.getlist('sap_user')) or not all(str(x) for x in form.getlist('sap_password')):
                 raise ValueError('Ingrese usuario y clave SAP para cada base.')
+            # Read-only Service Layer login/logout, per SAP company. Never write rates.
+            dbs=form.getlist('database_name'); roots=form.getlist('company_service_root')
+            odata_overrides=form.getlist('company_odata')
+            users=form.getlist('sap_user'); passwords=form.getlist('sap_password')
+            shared=('same_sap_credentials' in form)
+            global_root=re.sub(r'/v\\d+$','',str(form.get('service_layer_root','')).strip().rstrip('/'),flags=re.I)
+            global_odata=str(form.get('odata_version','v2')).strip() or 'v2'
+            failures=[]
+            for i,dbname in enumerate(dbs):
+                root=re.sub(r'/v\\d+$','',str(roots[i] if i<len(roots) and roots[i] else global_root).rstrip('/'),flags=re.I)
+                version=str(odata_overrides[i] if i<len(odata_overrides) and odata_overrides[i] else global_odata)
+                user=str(form.get('shared_sap_user','')) if shared else str(users[i])
+                pwd=str(form.get('shared_sap_password','')) if shared else str(passwords[i])
+                try:
+                    sap=SapFxClient(f'{root}/{version}',SapCompany(str(dbname),'TEST',False),user,pwd,
+                                    verify_tls=('sap_verify_tls' in form),timeout=min(settings.sap_timeout_seconds,12))
+                    try:
+                        sap.login()
+                    finally:
+                        sap.logout()
+                except Exception as exc:
+                    failures.append(f'{dbname}: {type(exc).__name__}: {str(exc)[:180]}')
+            if failures:
+                raise ValueError('No se pudo autenticar en SAP Service Layer. '+' | '.join(failures))
         if step==6:
             scodes=form.getlist('source_code')
             names=form.getlist('source_name')
@@ -303,6 +365,8 @@ async def setup_post(req:Request, logo:UploadFile|None=File(default=None)):
             cid=store.upsert_company(company_id=existing_company['id'] if existing_company else None,company_name=name,database_name=dbs[i],db_type=types[i] if i<len(types) else 'HANA',environment=env,enabled=True,allow_write=env=='TEST',scheduled_write=True,auto_enabled=True,schedule_hour=hh,schedule_minute=mm,use_usd=use_usd,use_eur=use_eur,sap_user=user,primary_bank=primary,secondary_bank=secondary,service_layer_root=roots[i] if i<len(roots) else '',odata_version=ods[i] if i<len(ods) else '',sap_b1_version=sap_ver,bank_source_codes=all_sources,currencies_csv=currencies_csv)
             store.set_secret_blob(cid,encrypt_secret(pwd))
         store.set_settings({'setup_complete':'true'})
+        draft_id=_setup_draft_id(req)
+        if draft_id: store.delete_setup_draft(draft_id)
         r=RedirectResponse('/?welcome=1',303); r.set_cookie(COOKIE,sign_session(admin_user,settings.web_session_secret),httponly=True,samesite='strict',secure=False,max_age=28800); return r
     except Exception as exc:
         log.exception('Initial setup failed')
