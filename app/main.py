@@ -23,7 +23,8 @@ from app.web_auth import COOKIE, sign_session, verify_session, verify_password, 
 from app.dashboard import layout, esc, badge, page_header
 from app.providers import get_provider
 from app.market_sources import fetch_source, scan_source, validate_snapshot_pairs, MarketSourceError
-from app.sap_client import SapCompany, SapFxClient\nfrom app.sync_engine import inspect_company, write_suggested_manual, run_due_schedules, reconcile_company, _run_status
+from app.sap_client import SapCompany, SapFxClient
+from app.sync_engine import inspect_company, write_suggested_manual, run_due_schedules, reconcile_company, _run_status
 from app.notifications import send_email, send_run_summary, recipients_from_text
 from app.version import get_version
 from app.setup_validation import require_currency_source_coverage
