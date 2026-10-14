@@ -153,7 +153,7 @@ def setup_get(step: int = 1):
 
 # Setup progress is persisted per random HttpOnly cookie, never by password.
 _SETUP_COOKIE='atas_setup_id'
-_SECRET_FIELDS={'admin_password','shared_sap_password','sap_password','smtp_password','source_secret_headers','sap_secret'}
+_SECRET_FIELDS={'admin_password','shared_sap_password','sap_password','smtp_password','source_secret_headers','sap_secret','source_config','headers_json'}
 def _setup_draft_id(req: Request) -> str | None:
     value=req.cookies.get(_SETUP_COOKIE,'')
     return value if re.fullmatch(r'[a-f0-9]{64}',value) else None
