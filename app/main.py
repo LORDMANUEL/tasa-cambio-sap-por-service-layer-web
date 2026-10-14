@@ -223,7 +223,26 @@ async def setup_validate_step(req: Request):
             odata_overrides=form.getlist('company_odata')
             users=form.getlist('sap_user'); passwords=form.getlist('sap_password')
             shared=('same_sap_credentials' in form)
-            global_root=re.sub(r'/v\\d+        if step==6:
+            global_root=re.sub(r'/v\\d+$','',str(form.get('service_layer_root','')).strip().rstrip('/'),flags=re.I)
+            global_odata=str(form.get('odata_version','v2')).strip() or 'v2'
+            failures=[]
+            for i,dbname in enumerate(dbs):
+                root=re.sub(r'/v\\d+$','',str(roots[i] if i<len(roots) and roots[i] else global_root).rstrip('/'),flags=re.I)
+                version=str(odata_overrides[i] if i<len(odata_overrides) and odata_overrides[i] else global_odata)
+                user=str(form.get('shared_sap_user','')) if shared else str(users[i])
+                pwd=str(form.get('shared_sap_password','')) if shared else str(passwords[i])
+                try:
+                    sap=SapFxClient(f'{root}/{version}',SapCompany(str(dbname),'TEST',False),user,pwd,
+                                    verify_tls=('sap_verify_tls' in form),timeout=min(settings.sap_timeout_seconds,12))
+                    try:
+                        sap.login()
+                    finally:
+                        sap.logout()
+                except Exception as exc:
+                    failures.append(f'{dbname}: {type(exc).__name__}: {str(exc)[:180]}')
+            if failures:
+                raise ValueError('No se pudo autenticar en SAP Service Layer. '+' | '.join(failures))
+        if step==6:
             scodes=form.getlist('source_code')
             names=form.getlist('source_name')
             types=form.getlist('source_type')
