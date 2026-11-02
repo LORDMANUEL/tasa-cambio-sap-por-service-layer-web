@@ -27,7 +27,7 @@ def test_bch_api_parser_rejects_stale_data():
 
 
 def test_bch_api_requires_encrypted_subscription_header():
-    with pytest.raises(BankProviderError,match="Ocp-Apim-Subscription-Key"):
+    with pytest.raises(BankProviderError,match="clave API"):
         fetch_bch_api({"url":"https://example.invalid","timeout_seconds":5,"tls_verify":1},Settings(),{})
 
 
@@ -48,3 +48,33 @@ def test_market_source_supports_bch_api(monkeypatch):
     },Settings())
     assert snap.rates["USD"]["buy"]==Decimal("26.9500")
     assert snap.rates["USD"]["sell"]==Decimal("26.9500")
+
+
+def test_bch_api_moves_encrypted_clave_to_query(monkeypatch):
+    import app.providers.bch_api as api
+
+    class Response:
+        status_code=200
+        content=b'[{"Nombre":"EC-TCR-01","Fecha":"2026-11-02T00:00:00Z","Valor":26.95}]'
+        url=api.DEFAULT_URL
+        def raise_for_status(self):
+            return None
+        def json(self):
+            return [{"Nombre":"EC-TCR-01","Fecha":"2026-11-02T00:00:00Z","Valor":26.95}]
+
+    seen={}
+    class Session:
+        def get(self,url,**kwargs):
+            seen["url"]=url
+            seen.update(kwargs)
+            return Response()
+
+    monkeypatch.setattr(api,"secure_session",lambda:Session())
+    result=api.fetch_bch_api(
+        {"url":api.DEFAULT_URL,"timeout_seconds":5,"tls_verify":1},
+        Settings(),
+        {"clave":"SECRET_VALUE"},
+    )
+    assert result["tcr"]==Decimal("26.95")
+    assert seen["params"]["clave"]=="SECRET_VALUE"
+    assert "clave" not in seen["headers"]

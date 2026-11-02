@@ -26,13 +26,13 @@ BCH Web-API oficial
 URL:
 
 ```text
-https://bchapi-am.developer.azure-api.net/api/v1/indicadores/97/cifras
+https://bchapi-am.azure-api.net/api/v1/indicadores/97/cifras
 ```
 
 Headers secretos API:
 
 ```json
-{"Ocp-Apim-Subscription-Key":"SU_CLAVE_BCH"}
+{"clave":"SU_CLAVE_BCH"}
 ```
 
 Atas cifra el JSON de headers secretos antes de persistirlo.
@@ -54,3 +54,14 @@ La clave se obtiene registrándose y suscribiéndose en el portal Web-API del BC
 ## Regla de escritura
 
 Las fuentes de respaldo pueden consultarse para diagnóstico y comparación. Si la fuente oficial configurada para la CompanyDB no responde, el consenso queda no seguro y Atas bloquea la escritura SAP. Esto evita sustituir silenciosamente la política financiera de la empresa.
+
+
+## Autenticación
+
+La clave se guarda cifrada dentro de los headers secretos de Atas usando:
+
+```json
+{"clave":"SU_CLAVE_BCH"}
+```
+
+Atas no envía `clave` como header: la extrae en memoria y la agrega únicamente como parámetro de la solicitud al gateway BCH. También admite `Ocp-Apim-Subscription-Key` cuando una suscripción del BCH utilice ese mecanismo.

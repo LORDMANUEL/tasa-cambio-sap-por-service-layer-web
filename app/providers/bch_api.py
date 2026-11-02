@@ -1,8 +1,8 @@
 """Official Banco Central de Honduras Web-API TCR connector.
 
 The BCH developer portal publishes indicator 97 (EC-TCR-01) as the daily
-Reference Exchange Rate. Access requires a subscription key. Atas keeps the
-key in the source's encrypted secret headers, not in source code.
+Reference Exchange Rate. Access requires an API key. Atas stores that key in
+the source's encrypted secret-header blob and only materializes it at request time.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from app.config import Settings
 from .base import BankProviderError
 from .http_client import secure_session
 
-DEFAULT_URL="https://bchapi-am.developer.azure-api.net/api/v1/indicadores/97/cifras"
+DEFAULT_URL="https://bchapi-am.azure-api.net/api/v1/indicadores/97/cifras"
 
 
 def _parse_date(value) -> date | None:
@@ -61,15 +61,28 @@ def parse_bch_api_payload(data, settings: Settings, *, today: date | None=None, 
 
 def fetch_bch_api(source: dict, settings: Settings, headers: dict[str,str]):
     url=str(source.get("url") or DEFAULT_URL).strip() or DEFAULT_URL
-    if not any(k.lower()=="ocp-apim-subscription-key" for k in headers):
+    secret_headers=dict(headers)
+    clave=None
+    for key in list(secret_headers):
+        if key.lower() in {"clave","api-key","apikey"}:
+            clave=secret_headers.pop(key)
+            break
+    has_subscription_header=any(k.lower()=="ocp-apim-subscription-key" for k in secret_headers)
+    if not clave and not has_subscription_header:
         raise BankProviderError(
-            "BCH Web-API requiere Ocp-Apim-Subscription-Key en Headers secretos API."
+            "BCH Web-API requiere una clave API cifrada (clave u Ocp-Apim-Subscription-Key)."
         )
+
+    params={"formato":"Json"}
+    if clave:
+        params["clave"]=clave
+
     session=secure_session()
     try:
         response=session.get(
             url,
-            headers=headers,
+            params=params,
+            headers=secret_headers,
             timeout=min(max(int(source.get("timeout_seconds") or settings.request_timeout_seconds),3),60),
             verify=bool(source.get("tls_verify",1)),
             allow_redirects=True,
@@ -77,12 +90,14 @@ def fetch_bch_api(source: dict, settings: Settings, headers: dict[str,str]):
         response.raise_for_status()
     except requests.RequestException as exc:
         raise BankProviderError(f"No se pudo consultar BCH Web-API: {exc.__class__.__name__}") from exc
+
     if len(response.content)>4_000_000:
         raise BankProviderError("Respuesta BCH Web-API excede 4 MB.")
     try:
         data=response.json()
     except Exception as exc:
         raise BankProviderError("BCH Web-API no devolvió JSON válido.") from exc
+
     observed,tcr=parse_bch_api_payload(data,settings)
     return {
         "observed_date":observed,
