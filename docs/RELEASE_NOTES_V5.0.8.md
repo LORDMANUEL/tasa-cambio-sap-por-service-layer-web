@@ -1,6 +1,6 @@
-# Atas V5.0.8-dev — SAP FX y fuentes oficiales
+# Atas V5.0.8 — SAP FX y fuentes oficiales
 
-Candidata de desarrollo sobre V5.0.7.
+Release estable sobre V5.0.7.
 
 ## Cambios
 
@@ -14,9 +14,9 @@ Candidata de desarrollo sobre V5.0.7.
 - Si la fuente oficial no responde, las fuentes de respaldo se muestran pero la escritura SAP queda bloqueada.
 - Wizard aclara que 3+ fuentes son recomendadas, no obligatorias.
 
-## Validación pendiente de release
+## Validación de release
 
-- CI Windows.
-- CI Debian/Ubuntu.
-- Security scan.
+- CI Windows: 714 pruebas + smoke EXE/Portable.
+- CI Debian/Ubuntu: 714 pruebas + smoke DEB.
+- Security scan: SUCCESS.
 - prueba real contra Service Layer TEST del cliente.
