@@ -78,3 +78,106 @@ def test_bch_api_moves_encrypted_clave_to_query(monkeypatch):
     assert result["tcr"]==Decimal("26.95")
     assert seen["params"]["clave"]=="SECRET_VALUE"
     assert "clave" not in seen["headers"]
+
+
+def test_store_accepts_bch_api_source_type():
+    from pathlib import Path
+    import tempfile
+    from app.store import Store
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/"fresh.db")
+        sid=st.upsert_bank_source(
+            source_id=None,
+            code="BCHAPI",
+            name="BCH API",
+            country="HN",
+            source_type="BCH_API",
+            url="https://bchapi-am.azure-api.net/api/v1/indicadores/97/cifras",
+            enabled=True,
+            config_json="{}",
+            headers_json="{}",
+            timeout_seconds=10,
+            tls_verify=True,
+        )
+        assert st.get_bank_source(sid)["source_type"]=="BCH_API"
+
+
+def test_store_migrates_legacy_bank_source_constraint():
+    from pathlib import Path
+    import tempfile
+    import sqlite3
+    from app.store import Store
+    with tempfile.TemporaryDirectory() as d:
+        path=Path(d)/"legacy.db"
+        con=sqlite3.connect(path)
+        con.executescript("""
+        CREATE TABLE bank_sources (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT NOT NULL UNIQUE,
+          name TEXT NOT NULL,
+          country TEXT NOT NULL DEFAULT '',
+          source_type TEXT NOT NULL CHECK(source_type IN ('PRESET','WEB_HTML','API_JSON')),
+          url TEXT NOT NULL DEFAULT '',
+          enabled INTEGER NOT NULL DEFAULT 1,
+          config_json TEXT NOT NULL DEFAULT '{}',
+          headers_json TEXT NOT NULL DEFAULT '{}',
+          secret_headers_blob TEXT,
+          timeout_seconds INTEGER NOT NULL DEFAULT 15,
+          tls_verify INTEGER NOT NULL DEFAULT 1,
+          last_status TEXT,
+          last_error TEXT,
+          last_checked_at TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        INSERT INTO bank_sources(code,name,country,source_type,url,created_at,updated_at)
+        VALUES('OLD','Old Source','HN','WEB_HTML','https://example.com','2026-01-01','2026-01-01');
+        """)
+        con.commit()
+        con.close()
+        st=Store(path)
+        assert st.get_bank_source_by_code("OLD")["source_type"]=="WEB_HTML"
+        sid=st.upsert_bank_source(
+            source_id=None,
+            code="BCHAPI",
+            name="BCH API",
+            country="HN",
+            source_type="BCH_API",
+            url="https://example.com",
+            enabled=True,
+            config_json="{}",
+            headers_json="{}",
+        )
+        assert st.get_bank_source(sid)["source_type"]=="BCH_API"
+
+
+def test_setup_step6_passes_encrypted_bch_api_secret(monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+    import tempfile
+    from fastapi.testclient import TestClient
+    import app.main as m
+    from app.store import Store
+
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/"setup.db")
+        monkeypatch.setattr(m,"store",st)
+        monkeypatch.setattr(m,"encrypt_secret",lambda value:"ENC::"+value)
+        captured={}
+        def fake_fetch(source,settings):
+            captured.update(source)
+            return SimpleNamespace(rates={"USD":{"buy":Decimal("26.90"),"sell":Decimal("26.95")}})
+        monkeypatch.setattr(m,"fetch_source",fake_fetch)
+        client=TestClient(m.app)
+        r=client.post("/setup/validate-step",data={
+            "_step":"6",
+            "source_code":"BCHAPI",
+            "source_name":"BCH API",
+            "source_type":"BCH_API",
+            "source_url":"https://bchapi-am.azure-api.net/api/v1/indicadores/97/cifras",
+            "source_config":"{}",
+            "source_secret_headers":'{"clave":"SECRET"}',
+        })
+        assert r.status_code==200
+        assert r.json()["ok"] is True
+        assert captured["secret_headers_blob"]=='ENC::{"clave":"SECRET"}'
