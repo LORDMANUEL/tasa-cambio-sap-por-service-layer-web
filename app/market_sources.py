@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 from app.config import Settings
 from app.providers import get_provider
 from app.providers.http_client import secure_session
+from app.providers.bch_api import fetch_bch_api
 from app.credential_store import decrypt_secret
 
 
@@ -282,6 +283,19 @@ def fetch_source(source: dict, settings: Settings) -> SourceSnapshot:
     stype = str(source.get("source_type") or "WEB_HTML").upper()
     code = str(source.get("code") or source.get("name") or "SOURCE").upper()
     name = str(source.get("name") or code)
+    if stype == "BCH_API":
+        result=fetch_bch_api(source,settings,_headers(source))
+        tcr=Decimal(str(result["tcr"]))
+        return SourceSnapshot(
+            code=code,
+            name=name,
+            source_type=stype,
+            source_url=result["source_url"],
+            fetched_at=result["fetched_at"].isoformat(),
+            rates={"USD":{"buy":tcr,"sell":tcr}},
+            raw_hash=result["raw_hash"],
+        )
+
     if stype == "PRESET":
         cfg = _normalize_config(source)
         preset = str(cfg.get("preset") or code).upper()

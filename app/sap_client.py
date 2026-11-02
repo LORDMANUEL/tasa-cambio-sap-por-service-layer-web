@@ -93,56 +93,108 @@ class SapFxClient:
         return match.group(1).lower() if match else "v2"
 
     def get_local_currency(self) -> str:
+        """Read the company local currency using the canonical Service Layer action.
+
+        SAP's current v2 reference documents SBOBobService_GetLocalCurrency as POST.
+        Some older Service Layer builds also expose the OData FunctionImport as GET,
+        so v2 falls back to GET only when the canonical action is not accepted.
+        """
         self._ensure_login()
         if self.odata_version == "v1":
             r = self._request("POST", "SBOBobService_GetLocalCurrency", payload={})
-        else:
-            r = self._request("GET", "SBOBobService_GetLocalCurrency()")
-        return str(_extract_scalar(r, text_ok=True)).strip()
+            return str(_extract_scalar(r, text_ok=True)).strip()
+
+        r = self.session.post(
+            self._url("SBOBobService_GetLocalCurrency"),
+            json={},
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            timeout=self.timeout,
+            verify=self.verify_tls,
+        )
+        if r.status_code < 400:
+            return str(_extract_scalar(r, text_ok=True)).strip()
+        if r.status_code not in {400, 404, 405, 501}:
+            code, message = _sap_error(r)
+            raise SapError(f"Service Layer HTTP {r.status_code} SAP={code} leyendo moneda local: {message}")
+
+        fallback = self.session.get(
+            self._url("SBOBobService_GetLocalCurrency()"),
+            headers={"Accept": "application/json"},
+            timeout=self.timeout,
+            verify=self.verify_tls,
+        )
+        if fallback.status_code >= 400:
+            code, message = _sap_error(fallback)
+            raise SapError(f"Service Layer HTTP {fallback.status_code} SAP={code} leyendo moneda local: {message}")
+        return str(_extract_scalar(fallback, text_ok=True)).strip()
 
     def get_currency_rate(self, currency: str, rate_date: date) -> Decimal:
-        """Devuelve la tasa o Decimal('0') cuando SAP devuelve -4006.
+        """Return the SAP rate or Decimal('0') when SAP reports -4006.
 
-        La llamada replica exactamente la validada en Postman y en el metadata OData v2.
+        v1 uses the action POST. v2 prefers the canonical POST documented by SAP
+        and falls back to the historical FunctionImport GET for compatibility
+        with installations where that route was previously validated.
         """
         self._ensure_login()
         cur = currency.upper().strip()
         if not re.fullmatch(r"[A-Z]{3}", cur):
             raise SapError(f"Código de moneda inválido: {currency!r}")
         ymd = rate_date.strftime("%Y%m%d")
+        payload = {"Currency": cur, "Date": ymd}
+
         if self.odata_version == "v1":
-            endpoint = "SBOBobService_GetCurrencyRate"
             try:
                 r = self.session.post(
-                    self._url(endpoint),
-                    json={"Currency": cur, "Date": ymd},
+                    self._url("SBOBobService_GetCurrencyRate"),
+                    json=payload,
                     headers={"Accept": "application/json", "Content-Type": "application/json"},
                     timeout=self.timeout,
                     verify=self.verify_tls,
                 )
             except requests.RequestException as exc:
                 raise SapError(f"Error de red leyendo {cur}: {exc}") from exc
-        else:
-            endpoint = f"SBOBobService_GetCurrencyRate(Currency='{cur}',Date='{ymd}')"
+            return _parse_currency_rate_response(r, cur, ymd)
+
+        # SAP Business One v2 canonical action (OData v4).
+        try:
+            r = self.session.post(
+                self._url("SBOBobService_GetCurrencyRate"),
+                json=payload,
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+                timeout=self.timeout,
+                verify=self.verify_tls,
+            )
+        except requests.RequestException as exc:
+            raise SapError(f"Error de red leyendo {cur}: {exc}") from exc
+
+        if r.status_code == 200 or _is_missing_rate_response(r):
+            return _parse_currency_rate_response(r, cur, ymd)
+
+        # Compatibility path for Service Layer installations exposing the
+        # historical FunctionImport GET instead of/alongside the canonical action.
+        if r.status_code not in {400, 404, 405, 501}:
+            return _parse_currency_rate_response(r, cur, ymd)
+
+        fallback_endpoints = (
+            f"SBOBobService_GetCurrencyRate(Currency='{cur}',Date='{ymd}')",
+            f"SBOBobService_GetCurrencyRate(Currency={cur},Date={ymd})",
+        )
+        last = r
+        for endpoint in fallback_endpoints:
             try:
-                r = self.session.get(self._url(endpoint), headers={"Accept": "application/json"},
-                                     timeout=self.timeout, verify=self.verify_tls)
+                last = self.session.get(
+                    self._url(endpoint),
+                    headers={"Accept": "application/json"},
+                    timeout=self.timeout,
+                    verify=self.verify_tls,
+                )
             except requests.RequestException as exc:
                 raise SapError(f"Error de red leyendo {cur}: {exc}") from exc
-
-        if r.status_code == 200:
-            value = _extract_scalar(r, text_ok=False)
-            try:
-                return Decimal(str(value))
-            except (InvalidOperation, TypeError, ValueError) as exc:
-                raise SapError(f"Tasa {cur} no interpretable: {r.text[:300]}") from exc
-
-        code, message = _sap_error(r)
-        if r.status_code == 400 and str(code) == "-4006":
-            log.info("SAP rate missing company=%s currency=%s date=%s code=-4006",
-                     self.company.company_db, cur, ymd)
-            return Decimal("0")
-        raise SapError(f"Service Layer HTTP {r.status_code} SAP={code} leyendo {cur}: {message}")
+            if last.status_code == 200 or _is_missing_rate_response(last):
+                return _parse_currency_rate_response(last, cur, ymd)
+            if last.status_code not in {400, 404, 405, 501}:
+                break
+        return _parse_currency_rate_response(last, cur, ymd)
 
     def set_currency_rate(self, currency: str, rate_date: date, rate: Decimal) -> None:
         self._ensure_login()
@@ -168,6 +220,26 @@ class SapFxClient:
 
     def __exit__(self, exc_type, exc, tb):
         self.logout()
+
+
+
+def _is_missing_rate_response(r: requests.Response) -> bool:
+    code, _ = _sap_error(r)
+    return r.status_code == 400 and str(code) == "-4006"
+
+
+def _parse_currency_rate_response(r: requests.Response, currency: str, ymd: str) -> Decimal:
+    if r.status_code == 200:
+        value = _extract_scalar(r, text_ok=False)
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise SapError(f"Tasa {currency} no interpretable: {r.text[:300]}") from exc
+    code, message = _sap_error(r)
+    if r.status_code == 400 and str(code) == "-4006":
+        log.info("SAP rate missing currency=%s date=%s code=-4006", currency, ymd)
+        return Decimal("0")
+    raise SapError(f"Service Layer HTTP {r.status_code} SAP={code} leyendo {currency}: {message}")
 
 
 def _json_or_none(r: requests.Response):

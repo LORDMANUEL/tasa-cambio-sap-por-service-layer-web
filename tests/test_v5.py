@@ -51,12 +51,47 @@ def test_prod_client_write_guard():
     try: c.set_currency_rate('USD',date.today(),Decimal('27.1')); assert False
     except Exception as exc: assert 'BLOQUEADA' in str(exc)
 
-def test_sap_get_rate_and_minus4006():
+def test_sap_v2_prefers_official_post_and_handles_minus4006():
     c=SapFxClient('https://sap.invalid/b1s/v2',SapCompany('TEST','TEST',True),'u','p',verify_tls=False); c.logged_in=True
     ok=requests.Response(); ok.status_code=200; ok._content=b'27.027000'; ok.headers['Content-Type']='application/json'
     missing=requests.Response(); missing.status_code=400; missing._content=b'{"error":{"code":"-4006","message":"Update the exchange rate"}}'; missing.headers['Content-Type']='application/json'
-    c.session.get=lambda *a,**k:ok; assert c.get_currency_rate('USD',date(2026,10,2))==Decimal('27.027000')
-    c.session.get=lambda *a,**k:missing; assert c.get_currency_rate('EUR',date(2026,10,2))==Decimal('0')
+    calls=[]
+    def post_ok(url,**kwargs):
+        calls.append((url,kwargs.get('json')))
+        return ok
+    c.session.post=post_ok
+    assert c.get_currency_rate('USD',date(2026,10,2))==Decimal('27.027000')
+    assert calls[-1][0].endswith('/v2/SBOBobService_GetCurrencyRate')
+    assert calls[-1][1]=={'Currency':'USD','Date':'20261002'}
+    c.session.post=lambda *a,**k:missing
+    assert c.get_currency_rate('EUR',date(2026,10,2))==Decimal('0')
+
+
+def test_sap_v2_falls_back_to_function_import_get():
+    c=SapFxClient('https://sap.invalid/b1s/v2',SapCompany('TEST','TEST',True),'u','p',verify_tls=False); c.logged_in=True
+    unavailable=requests.Response(); unavailable.status_code=405; unavailable._content=b'{"error":{"message":"Method not allowed"}}'; unavailable.headers['Content-Type']='application/json'
+    ok=requests.Response(); ok.status_code=200; ok._content=b'27.123400'; ok.headers['Content-Type']='application/json'
+    c.session.post=lambda *a,**k:unavailable
+    urls=[]
+    def fake_get(url,**kwargs):
+        urls.append(url)
+        return ok
+    c.session.get=fake_get
+    assert c.get_currency_rate('USD',date(2026,10,2))==Decimal('27.123400')
+    assert "SBOBobService_GetCurrencyRate(" in urls[0]
+
+
+def test_sap_v2_local_currency_prefers_post():
+    c=SapFxClient('https://sap.invalid/b1s/v2',SapCompany('TEST','TEST',False),'u','p',verify_tls=False); c.logged_in=True
+    ok=requests.Response(); ok.status_code=200; ok._content=b'"HNL"'; ok.headers['Content-Type']='application/json'
+    called={}
+    def fake_post(url,**kwargs):
+        called['url']=url
+        return ok
+    c.session.post=fake_post
+    assert c.get_local_currency()=='HNL'
+    assert called['url'].endswith('/v2/SBOBobService_GetLocalCurrency')
+
 
 def test_per_company_effective_endpoint(monkeypatch):
     import app.sync_engine as se
