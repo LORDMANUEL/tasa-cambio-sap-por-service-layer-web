@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS bank_sources (
   code TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
   country TEXT NOT NULL DEFAULT '',
-  source_type TEXT NOT NULL CHECK(source_type IN ('PRESET','WEB_HTML','API_JSON')),
+  source_type TEXT NOT NULL CHECK(source_type IN ('PRESET','WEB_HTML','API_JSON','BCH_API')),
   url TEXT NOT NULL DEFAULT '',
   enabled INTEGER NOT NULL DEFAULT 1,
   config_json TEXT NOT NULL DEFAULT '{}',
@@ -202,10 +202,23 @@ class Store:
                 "WHERE scheduler_claim_date IS NULL AND last_run_date IS NOT NULL"
             )
 
+    def _migrate_bank_sources(self, con: sqlite3.Connection) -> None:
+        """Upgrade bank_sources CHECK constraint without losing configured sources."""
+        row=con.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='bank_sources'").fetchone()
+        table_sql=(row[0] or '') if row else ''
+        if not table_sql or 'BCH_API' in table_sql:
+            return
+        con.execute("DROP INDEX IF EXISTS idx_bank_sources_enabled")
+        con.execute("ALTER TABLE bank_sources RENAME TO bank_sources_legacy")
+        con.execute("CREATE TABLE bank_sources (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, country TEXT NOT NULL DEFAULT '', source_type TEXT NOT NULL CHECK(source_type IN ('PRESET','WEB_HTML','API_JSON','BCH_API')), url TEXT NOT NULL DEFAULT '', enabled INTEGER NOT NULL DEFAULT 1, config_json TEXT NOT NULL DEFAULT '{}', headers_json TEXT NOT NULL DEFAULT '{}', secret_headers_blob TEXT, timeout_seconds INTEGER NOT NULL DEFAULT 15, tls_verify INTEGER NOT NULL DEFAULT 1, last_status TEXT, last_error TEXT, last_checked_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)")
+        con.execute("INSERT INTO bank_sources(id,code,name,country,source_type,url,enabled,config_json,headers_json,secret_headers_blob,timeout_seconds,tls_verify,last_status,last_error,last_checked_at,created_at,updated_at) SELECT id,code,name,country,source_type,url,enabled,config_json,headers_json,secret_headers_blob,timeout_seconds,tls_verify,last_status,last_error,last_checked_at,created_at,updated_at FROM bank_sources_legacy")
+        con.execute("DROP TABLE bank_sources_legacy")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_bank_sources_enabled ON bank_sources(enabled, code)")
     def initialize(self) -> None:
         with self.conn() as con:
             con.executescript(SCHEMA)
             self._migrate_companies(con)
+            self._migrate_bank_sources(con)
             defaults = {
                 "log_retention_days": "30",
                 "service_layer_root": "",
@@ -480,7 +493,7 @@ class Store:
         code=code.strip().upper().replace(' ','_')
         if not code or not name.strip(): raise ValueError('Código y nombre de fuente son requeridos')
         st=source_type.strip().upper()
-        if st not in {'PRESET','WEB_HTML','API_JSON'}: raise ValueError('Tipo de fuente inválido')
+        if st not in {'PRESET','WEB_HTML','API_JSON','BCH_API'}: raise ValueError('Tipo de fuente inválido')
         try: json.loads(config_json or '{}'); json.loads(headers_json or '{}')
         except Exception as exc: raise ValueError('Configuración/headers deben ser JSON válido') from exc
         now=self.now(); vals=(code,name.strip(),country.strip(),st,url.strip(),int(enabled),config_json or '{}',headers_json or '{}',max(3,min(60,int(timeout_seconds))),int(tls_verify),now)
