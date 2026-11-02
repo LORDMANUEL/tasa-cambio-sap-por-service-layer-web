@@ -420,7 +420,7 @@ def build_consensus(store, settings: Settings, company: dict, currencies: list[s
     by_code = {s.code.upper(): s for s in snapshots}
 
     if primary not in by_code:
-        notices.append(f"La fuente preferida {primary or '(sin definir)'} no respondió; se intentarán las otras fuentes configuradas.")
+        warnings.append(f"La fuente oficial {primary or '(sin definir)'} no está disponible; escritura SAP bloqueada.")
 
     for cur in [c.upper() for c in currencies]:
         values: list[tuple[str, Decimal]] = []
@@ -439,7 +439,7 @@ def build_consensus(store, settings: Settings, company: dict, currencies: list[s
             warnings.append(f"{cur}: ninguna fuente configurada publicó una tasa válida.")
             continue
         if selected != primary:
-            notices.append(f"{cur}: se utiliza {selected} como respaldo de {primary or '(sin definir)'}; requiere validación de política antes de escribir SAP.")
+            warnings.append(f"{cur}: {selected} está disponible como respaldo, pero la fuente oficial {primary or '(sin definir)'} no respondió; escritura SAP bloqueada.")
 
         initial_median = Decimal(str(median([value for _, value in values])))
         deviation_by_code = {

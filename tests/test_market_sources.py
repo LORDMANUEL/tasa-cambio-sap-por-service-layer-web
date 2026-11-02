@@ -279,3 +279,34 @@ def test_api_json_mapping_supports_custom_paths():
     result=_extract_json(data,config)
     assert result['USD']['buy']==Decimal('26.9000')
     assert result['USD']['sell']==Decimal('27.0500')
+
+
+def test_consensus_blocks_write_when_primary_unavailable_even_if_backup_valid(monkeypatch):
+    import app.market_sources as ms
+    from app.market_sources import SourceSnapshot
+    with tempfile.TemporaryDirectory() as d:
+        st=Store(Path(d)/'fallback.db')
+        for code in ('PRIMARY','BACKUP'):
+            st.upsert_bank_source(
+                source_id=None,code=code,name=code,country='HN',
+                source_type='WEB_HTML',url='https://example.com',
+                enabled=True,config_json='{}'
+            )
+        def fake(src,settings):
+            if src['code']=='PRIMARY':
+                raise RuntimeError('offline')
+            return SourceSnapshot(
+                'BACKUP','BACKUP','WEB_HTML','https://example.com',
+                '2026-11-02T06:00:00-06:00',
+                {'USD':{'buy':Decimal('26.80'),'sell':Decimal('26.95')}},
+                'hash'
+            )
+        monkeypatch.setattr(ms,'fetch_source',fake)
+        result=ms.build_consensus(
+            st,Settings(),
+            {'primary_bank':'PRIMARY','bank_source_codes':'PRIMARY,BACKUP'},
+            ['USD']
+        )
+        assert not result.safe
+        assert result.official_rates['USD']==Decimal('26.95')
+        assert any('fuente oficial' in w.lower() and 'bloqueada' in w.lower() for w in result.warnings)

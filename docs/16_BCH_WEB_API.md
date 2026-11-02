@@ -49,3 +49,8 @@ Atas cifra el JSON de headers secretos antes de persistirlo.
 ## Alta de clave
 
 La clave se obtiene registrándose y suscribiéndose en el portal Web-API del BCH.
+
+
+## Regla de escritura
+
+Las fuentes de respaldo pueden consultarse para diagnóstico y comparación. Si la fuente oficial configurada para la CompanyDB no responde, el consenso queda no seguro y Atas bloquea la escritura SAP. Esto evita sustituir silenciosamente la política financiera de la empresa.
