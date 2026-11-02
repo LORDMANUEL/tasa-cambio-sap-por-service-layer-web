@@ -18,7 +18,7 @@ def require_currency_source_coverage(
     snapshots: dict[str, object],
     currencies: list[str],
     *,
-    minimum: int=3,
+    minimum: int=1,
 ) -> dict[str, list[str]]:
     """Require enough validated sources for every requested currency."""
     coverage=currency_source_coverage(snapshots,currencies)

@@ -1079,3 +1079,13 @@ def test_backup_router_resolves_store_lazily(monkeypatch,tmp_path):
     r=client.post('/settings/backup',headers={'cookie':f'{m.COOKIE}={cookie}'})
     assert r.status_code==200
     assert seen['path']==second.path
+
+
+def test_bank_editor_and_setup_minimum_match_runtime():
+    from app.config import BASE_DIR
+    main=(BASE_DIR/'app/main.py').read_text(encoding='utf-8')
+    setup=(BASE_DIR/'app/setup_validation.py').read_text(encoding='utf-8')
+    assert "value='BCH_API'" in main
+    assert '1 mínima · 3+ recomendado' in main
+    assert 'Mínimo 3 por base' not in main
+    assert 'minimum: int=1' in setup
